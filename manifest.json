@@ -1,0 +1,26 @@
+{
+  "manifest_version": 2,
+  "name": "DotGit",
+  "version": "1.11",
+  "description": "A Firefox extension to check if .git is exposed in visited websites",
+  "icons": {
+    "48": "icons/dotgit-48.png",
+    "96": "icons/dotgit-96.png"
+  },
+  "permissions": [
+    "*://*/*",
+    "webRequest",
+    "storage",
+    "notifications"
+  ],
+  "background": {
+    "scripts": [
+      "dotgit.js"
+    ]
+  },
+  "browser_action": {
+    "default_icon": "icons/dotgit-32.png",
+    "default_title": "DotGit",
+    "default_popup": "popup/popup.html"
+  }
+}
