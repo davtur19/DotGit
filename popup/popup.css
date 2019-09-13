@@ -1,16 +1,13 @@
+body {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+}
+main {
+  flex: 1 0 auto;
+}
 ul{
-  height: 200px;
-  overflow-y: scroll;
-}
-
-.button {
-  margin: 3% auto;
-  padding: 4px;
-  text-align: center;
-  font-size: 1.5em;
-  cursor: pointer;
-}
-
-h3 {
-  text-align: center;
+  max-height: 200px;
+  width: 300px;
+  overflow-y: auto;
 }
