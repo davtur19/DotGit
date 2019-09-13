@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "DotGit",
-  "version": "1.11",
-  "description": "A Firefox extension to check if .git is exposed in visited websites",
+  "version": "1.12",
+  "description": "An extension to check if .git is exposed in visited websites",
   "icons": {
     "48": "icons/dotgit-48.png",
     "96": "icons/dotgit-96.png"

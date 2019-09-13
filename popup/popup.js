@@ -1,6 +1,5 @@
 const MAX_ITEMS = 100;
-const storage = browser.storage.local.get();
-browser.browserAction.setBadgeText({
+chrome.browserAction.setBadgeText({
     text: ""
 });
 
@@ -24,27 +23,27 @@ function addElements(element, array, callback) {
 
 document.addEventListener("click", (e) => {
     if (e.target.classList.contains("reset")) {
-        browser.storage.local.set({
+        chrome.storage.local.set({
             checked: [],
             withExposedGit: []
         });
 
-        browser.runtime.reload();
+        chrome.runtime.reload();
     }
 });
 
 
-storage.then(results => {
-    if (typeof results.checked !== "undefined" && results.checked.length !== 0) {
+chrome.storage.local.get(["checked", "withExposedGit"], function(visitedSite) {
+    if (typeof visitedSite.checked !== "undefined" && visitedSite.checked.length !== 0) {
         let hostElement = document.getElementById("hosts");
-        addElements(hostElement, results.checked, (url) => {
+        addElements(hostElement, visitedSite.checked, (url) => {
             return `${url}`;
         });
     }
 
-    if (typeof results.withExposedGit !== "undefined" && results.withExposedGit.length !== 0) {
+    if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
         let hostElementFound = document.getElementById("hostsFound");
-        addElements(hostElementFound, results.withExposedGit, (url) => {
+        addElements(hostElementFound, visitedSite.withExposedGit, (url) => {
             return `${url}`;
         });
     }

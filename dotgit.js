@@ -18,15 +18,15 @@ function checkGit(url, visitedSite) {
     }).then(function(text) {
         if (text !== false && text.startsWith(GIT_HEAD_HEADER) === true) {
             visitedSite.withExposedGit.push(to_check);
-            browser.storage.local.set(visitedSite);
+            chrome.storage.local.set(visitedSite);
 
-            browser.browserAction.setBadgeText({
+            chrome.browserAction.setBadgeText({
                 text: visitedSite.withExposedGit.length.toString()
             });
 
-            browser.notifications.create({
+            chrome.notifications.create({
                 type: "basic",
-                iconUrl: browser.extension.getURL("icons/dotgit-48.png"),
+                iconUrl: chrome.extension.getURL("icons/dotgit-48.png"),
                 title: "Found an exposed .git",
                 message: to_check
             });
@@ -35,7 +35,7 @@ function checkGit(url, visitedSite) {
 }
 
 
-browser.storage.local.get().then(visitedSite => {
+chrome.storage.local.get(["checked", "withExposedGit"], function(visitedSite) {
     // Initialize the saved stats if not yet initialized.
     if (typeof visitedSite.checked === "undefined") {
         visitedSite = {
@@ -43,16 +43,20 @@ browser.storage.local.get().then(visitedSite => {
             withExposedGit: []
         };
 
-        browser.storage.local.set(visitedSite);
+        chrome.storage.local.set(visitedSite);
     }
 
-    browser.webRequest.onCompleted.addListener(function(details) {
+    chrome.webRequest.onCompleted.addListener(function(details) {
         let url = new URL(details["url"])["origin"];
         url = url.replace(WS_SEARCH, WS_REPLACE);
 
+        if(url.startsWith("chrome-extension")) {
+            return false;
+        }
+
         if (visitedSite.checked.includes(url) === false) {
             visitedSite.checked.push(url);
-            browser.storage.local.set(visitedSite);
+            chrome.storage.local.set(visitedSite);
             checkGit(url, visitedSite);
         }
     }, {
