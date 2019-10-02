@@ -15,7 +15,10 @@ function addElements(element, array, callback) {
         }
 
         const listItem = document.createElement("li");
-        listItem.textContent = callback(array[i]);
+        const link = document.createElement("a");
+        link.setAttribute("href", callback(array[i]));
+        link.innerText = callback(array[i]);
+        listItem.appendChild(link);
         element.appendChild(listItem);
     }
 }
@@ -35,6 +38,8 @@ document.addEventListener("click", (e) => {
 
 chrome.storage.local.get(["checked", "withExposedGit"], function(visitedSite) {
     if (typeof visitedSite.checked !== "undefined" && visitedSite.checked.length !== 0) {
+        let hostElementTitle = document.getElementById("hostsTitle");
+        hostElementTitle.textContent = "Visited hosts (" + visitedSite.checked.length + " out of 100 shown):";
         let hostElement = document.getElementById("hosts");
         addElements(hostElement, visitedSite.checked, (url) => {
             return `${url}`;
@@ -42,9 +47,11 @@ chrome.storage.local.get(["checked", "withExposedGit"], function(visitedSite) {
     }
 
     if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
+        let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
+        hostElementFoundTitle.textContent = ".git exposed (" + visitedSite.withExposedGit.length + " out of 100 shown):";
         let hostElementFound = document.getElementById("hostsFound");
         addElements(hostElementFound, visitedSite.withExposedGit, (url) => {
-            return `${url}`;
+            return `${url}/.git/config`;
         });
     }
 });

@@ -4,19 +4,20 @@
     <meta charset="utf-8">
     <link rel="stylesheet" href="materialize.min.css" />
     <link rel="stylesheet" href="popup.css" />
+    <base target="_blank">
     <script src="popup.js"></script>
   </head>
   <body>
     <div class="center">
       <div class="row green" style="position:absolute; top:0; width:100%">
-        <h6>Visited hosts (last 100):</h6>
+        <h6 id="hostsTitle">Visited hosts (0 out of 100 shown):</h6>
       </div>
       <div class="section"></div>
       <ul id="hosts">
         <li>No data collected yet...</li>
       </ul>
       <div class="row green" style="position:absolute; top:220; width:100%">
-        <h6>.git exposed (last 100):</h6>
+        <h6 id="hostsFoundTitle">.git exposed (0 out of 100 shown):</h6>
       </div>
       <div class="section"></div>
       <ul id="hostsFound">

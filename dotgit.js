@@ -17,7 +17,7 @@ function checkGit(url, visitedSite) {
         return false;
     }).then(function(text) {
         if (text !== false && text.startsWith(GIT_HEAD_HEADER) === true) {
-            visitedSite.withExposedGit.push(to_check);
+            visitedSite.withExposedGit.push(url);
             chrome.storage.local.set(visitedSite);
 
             chrome.browserAction.setBadgeText({
