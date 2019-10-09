@@ -1,8 +1,16 @@
 const MAX_ITEMS = 100;
-chrome.browserAction.setBadgeText({
-    text: ""
-});
 
+// Not supported on Firefox for Android
+if (chrome.browserAction.setBadgeText) {
+    chrome.browserAction.setBadgeText({
+        text: ""
+    });
+    // set width for desktop devices
+    document.addEventListener('DOMContentLoaded', function () {
+        let test = document.getElementById("hostsFound").style.width = "380px";
+        console.log(test);
+    });
+}
 
 function addElements(element, array, callback, downloading) {
 

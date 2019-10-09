@@ -35,6 +35,15 @@ const GIT_WELL_KNOW_PATHS = [
 ];
 
 
+// Not supported on Firefox for Android
+if (chrome.browserAction.setIcon) {
+    chrome.browserAction.setIcon({
+        path: {
+            32: "icons/dotgit-32.png"
+        }
+    });
+}
+
 function notification(title, message) {
     chrome.notifications.create({
         type: "basic",
@@ -60,10 +69,12 @@ function checkGit(url, visitedSite) {
             // .git found
             visitedSite.withExposedGit.push(url);
             chrome.storage.local.set(visitedSite);
-
-            chrome.browserAction.setBadgeText({
-                text: visitedSite.withExposedGit.length.toString()
-            });
+            // Not supported on Firefox for Android
+            if (chrome.browserAction.setBadgeText) {
+                chrome.browserAction.setBadgeText({
+                    text: visitedSite.withExposedGit.length.toString()
+                });
+            }
 
             notification("Found an exposed .git", to_check);
         }

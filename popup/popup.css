@@ -7,7 +7,6 @@ body {
 
 ul.collection {
     max-height: 500px;
-    width: 350px;
     overflow-y: auto;
     margin: 7px;
 }
