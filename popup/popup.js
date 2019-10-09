@@ -4,54 +4,100 @@ chrome.browserAction.setBadgeText({
 });
 
 
-function addElements(element, array, callback) {
-    while (element.firstChild) {
-        element.removeChild(element.firstChild);
-    }
+function addElements(element, array, callback, downloading) {
 
     for (let i = array.length - 1; i > -1; i--) {
         if (i <= array.length - MAX_ITEMS) {
             break;
         }
 
+        /*
+        <li class="collection-item">
+            <span class="secondary-content">
+                    <i class="material-icons btn-small download">file_download</i>
+            </span>
+            <span class="truncate">
+                <a href="https://example.org/">testtesttesttesttesttesttesttesttesttesttesttest</a>
+            </span>
+        </li>
+        */
         const listItem = document.createElement("li");
+        listItem.setAttribute("class", "collection-item");
+
+        const spanLink = document.createElement("span");
+        spanLink.setAttribute("class", "truncate");
+
+        const spanIcon = document.createElement("span");
+        spanIcon.setAttribute("class", "secondary-content");
+
+        const btnDownload = document.createElement("i");
+        if (downloading.includes(callback(array[i]))) {
+            btnDownload.setAttribute("class", "material-icons btn-small blue disabled");
+        } else {
+            btnDownload.setAttribute("class", "material-icons btn-small blue download");
+        }
+        btnDownload.innerText = "file_download";
+
         const link = document.createElement("a");
-        link.setAttribute("href", callback(array[i]));
+        link.setAttribute("href", callback(array[i]) + "/.git/config");
         link.innerText = callback(array[i]);
-        listItem.appendChild(link);
+
+        spanLink.appendChild(link);
+        spanIcon.appendChild(btnDownload);
+        listItem.appendChild(spanIcon);
+        listItem.appendChild(spanLink);
         element.appendChild(listItem);
     }
 }
 
 
 document.addEventListener("click", (e) => {
-    if (e.target.classList.contains("reset")) {
+    if (e.target.id === "reset") {
         chrome.storage.local.set({
             checked: [],
-            withExposedGit: []
+            withExposedGit: [],
+            downloading: []
+        });
+        chrome.runtime.reload();
+    } else if (e.target.classList.contains("download")) {
+        e.target.setAttribute("class", "material-icons btn-small blue disabled");
+        chrome.storage.local.get(["downloading"], function (downloading) {
+            if (typeof downloading.downloading !== "undefined" && downloading.downloading.length !== 0) {
+                downloading.downloading.push(e.target.parentElement.nextElementSibling.innerText);
+                chrome.storage.local.set({
+                    downloading: downloading.downloading
+                });
+            } else {
+                chrome.storage.local.set({
+                    downloading: [e.target.parentElement.nextElementSibling.innerText]
+                });
+            }
         });
 
-        chrome.runtime.reload();
+        chrome.runtime.sendMessage({
+            type: "download",
+            url: e.target.parentElement.nextElementSibling.innerText
+        }, function (response) {
+            e.target.setAttribute("class", "material-icons btn-small blue download");
+        });
     }
 });
 
 
-chrome.storage.local.get(["checked", "withExposedGit"], function(visitedSite) {
-    if (typeof visitedSite.checked !== "undefined" && visitedSite.checked.length !== 0) {
-        let hostElementTitle = document.getElementById("hostsTitle");
-        hostElementTitle.textContent = "Visited hosts (" + visitedSite.checked.length + " out of 100 shown):";
-        let hostElement = document.getElementById("hosts");
-        addElements(hostElement, visitedSite.checked, (url) => {
-            return `${url}`;
-        });
-    }
-
+chrome.storage.local.get(["withExposedGit", "downloading"], function (visitedSite) {
     if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
         let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
-        hostElementFoundTitle.textContent = ".git exposed (" + visitedSite.withExposedGit.length + " out of 100 shown):";
+        hostElementFoundTitle.textContent = visitedSite.withExposedGit.length + " out of " + MAX_ITEMS + " shown";
+
         let hostElementFound = document.getElementById("hostsFound");
-        addElements(hostElementFound, visitedSite.withExposedGit, (url) => {
-            return `${url}/.git/config`;
-        });
+        if (typeof visitedSite.downloading !== "undefined" && visitedSite.downloading.length !== 0) {
+            addElements(hostElementFound, visitedSite.withExposedGit, function (url) {
+                return `${url}`;
+            }, visitedSite.downloading);
+        } else {
+            addElements(hostElementFound, visitedSite.withExposedGit, function (url) {
+                return `${url}`;
+            }, []);
+        }
     }
 });

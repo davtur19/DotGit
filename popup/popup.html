@@ -1,35 +1,30 @@
 <!DOCTYPE html>
-<html>
-  <head>
+<html lang="en">
+<head>
+    <title>DotGit</title>
     <meta charset="utf-8">
-    <link rel="stylesheet" href="materialize.min.css" />
-    <link rel="stylesheet" href="popup.css" />
+    <link rel="stylesheet" href="../lib/materialize.min.css"/>
+    <link rel="stylesheet" href="icon.css">
+    <link rel="stylesheet" href="popup.css"/>
     <base target="_blank">
     <script src="popup.js"></script>
-  </head>
-  <body>
-    <div class="center">
-      <div class="row green" style="position:absolute; top:0; width:100%">
-        <h6 id="hostsTitle">Visited hosts (0 out of 100 shown):</h6>
-      </div>
-      <div class="section"></div>
-      <ul id="hosts">
-        <li>No data collected yet...</li>
-      </ul>
-      <div class="row green" style="position:absolute; top:220; width:100%">
-        <h6 id="hostsFoundTitle">.git exposed (0 out of 100 shown):</h6>
-      </div>
-      <div class="section"></div>
-      <ul id="hostsFound">
-        <li>No data collected yet...</li>
-      </ul>
-      <div class="section"></div>
-      <div class="section"></div>
+</head>
+<body class="grey darken-3">
+<nav>
+    <div class="nav-wrapper grey darken-3">
+        <div class="left brand-logo">DotGit</div>
+        <ul class="right">
+            <li>
+                <a href="../about.html" id="about">About</a>
+            </li>
+            <li>
+                <a class="waves-effect waves-light hoverable btn red darken-1" id="reset">Clear</a>
+            </li>
+        </ul>
     </div>
-    <footer class="page-footer transparent" style="position:absolute; bottom:0; width:100%">
-      <div class="center">
-        <button class="btn waves-effect waves-light green hoverable reset" style="margin-bottom:10px">Reset</button>
-      </div>
-    </footer>
-  </body>
+</nav>
+<ul class="collection" id="hostsFound">
+    <li class="collection-item center" id="hostsFoundTitle">0 out of 100 shown</li>
+</ul>
+</body>
 </html>
