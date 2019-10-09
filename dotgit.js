@@ -1,4 +1,5 @@
-const SLEEP = 150;
+const WAIT = 2000;
+const MAX_CONNECTIONS = 20;
 
 const WS_SEARCH = /(ws)(s)?:\/\//;
 const WS_REPLACE = "http$2://";
@@ -102,8 +103,9 @@ function startDownload(baseUrl, downloadFinished) {
 
     // make zip
     function downloadZip() {
-        if (running_tasks === 0) {
+        if (running_tasks === 0 && waiting === 0) {
             let zip = new JSZip();
+            notification("Download status", "Creating zip...");
 
             downloadedFiles.forEach(function (file) {
                 zip.file(file[0], file[1], {arrayBuffer: true});
@@ -119,27 +121,32 @@ function startDownload(baseUrl, downloadFinished) {
         }
     }
 
+    let waiting = 0;
 
     function downloadFile(path, decompress, callback) {
         if (walkedPaths.includes(path)) {
             return;
         }
 
-        walkedPaths.push(path);
-        running_tasks++;
-
-        fetch(baseUrl + GIT_PATH + path, {
-            redirect: "manual"
-        }).then(function (response) {
-            if (response.ok && response.status === 200) {
-                fileExist = true;
-                return response.arrayBuffer();
-            }
-        }).catch(function () {
-            downloadZip();
-        }).then(function (buffer) {
+        if (running_tasks > MAX_CONNECTIONS) {
+            waiting++;
             setTimeout(function () {
+                waiting--;
+                downloadFile(path, decompress, callback);
+            }, WAIT);
+        } else {
+            walkedPaths.push(path);
+            running_tasks++;
+
+            fetch(baseUrl + GIT_PATH + path, {
+                redirect: "manual"
+            }).then(function (response) {
+                if (response.ok && response.status === 200) {
+                    fileExist = true;
+                    return response.arrayBuffer();
+                }
                 running_tasks--;
+            }).then(function (buffer) {
                 if (typeof buffer !== "undefined") {
                     downloadedFiles.push([path, buffer]);
                     const words = new Uint8Array(buffer);
@@ -152,12 +159,11 @@ function startDownload(baseUrl, downloadFinished) {
                         // plaintext file
                         callback(arrayBufferToString(words));
                     }
+                    running_tasks--;
                 }
                 downloadZip();
-            }, running_tasks * SLEEP);
-        }).catch(function () {
-            downloadZip();
-        });
+            });
+        }
     }
 
 
@@ -192,11 +198,12 @@ function startDownload(baseUrl, downloadFinished) {
                 search.lastIndex++;
             }
 
-            matches.forEach((match) => {
+
+            for (let i = 0; i < matches.length; i++) {
                 // make object path and download
-                let path = GIT_OBJECTS_PATH + match.slice(0, 2) + "/" + match.slice(2);
+                let path = GIT_OBJECTS_PATH + matches[i].slice(0, 2) + "/" + matches[i].slice(2);
                 downloadFile(path, true, checkResult);
-            });
+            }
         }
     }
 
@@ -211,14 +218,14 @@ function startDownload(baseUrl, downloadFinished) {
                 search.lastIndex++;
             }
 
-            matches.forEach((match) => {
-                let pathExt = GIT_PACK_PATH + match + GIT_PACK_EXT;
-                let pathIdx = GIT_PACK_PATH + match + GIT_IDX_EXT;
-                downloadFile(pathExt, false, function (a) {
+            for (let i = 0; i < matches.length; i++) {
+                let pathExt = GIT_PACK_PATH + matches[i] + GIT_PACK_EXT;
+                let pathIdx = GIT_PACK_PATH + matches[i] + GIT_IDX_EXT;
+                downloadFile(pathExt, false, function () {
                 });
-                downloadFile(pathIdx, false, function (a) {
+                downloadFile(pathIdx, false, function () {
                 });
-            });
+            }
         }
     }
 
@@ -230,9 +237,9 @@ function startDownload(baseUrl, downloadFinished) {
     }
 
     // start download from well know paths
-    GIT_WELL_KNOW_PATHS.forEach(function (path) {
-        downloadFile(path, false, checkResult);
-    });
+    for (let i = 0; i < GIT_WELL_KNOW_PATHS.length; i++) {
+        downloadFile(GIT_WELL_KNOW_PATHS[i], false, checkResult);
+    }
 }
 
 
@@ -260,7 +267,6 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                 notification("Download status", "Failed to download " + request.url + "\nNo files found");
                 sendResponse({status: false});
             }
-            chrome.notifications.create(notification);
         });
     }
 

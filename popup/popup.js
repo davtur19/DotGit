@@ -7,8 +7,7 @@ if (chrome.browserAction.setBadgeText) {
     });
     // set width for desktop devices
     document.addEventListener('DOMContentLoaded', function () {
-        let test = document.getElementById("hostsFound").style.width = "380px";
-        console.log(test);
+        document.getElementById("hostsFound").style.width = "380px";
     });
 }
 
@@ -57,7 +56,6 @@ function addElements(element, array, callback, downloading) {
         element.appendChild(listItem);
     }
 }
-
 
 document.addEventListener("click", (e) => {
     if (e.target.id === "reset") {
