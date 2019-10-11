@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "DotGit",
-  "version": "3.2",
+  "version": "3.3",
   "description": "An extension to check if .git is exposed in visited websites",
   "icons": {
     "48": "icons/dotgit-48.png",

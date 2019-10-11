@@ -1,4 +1,5 @@
-const WAIT = 2000;
+const WAIT = 100;
+const MAX_WAIT = 10000;
 const MAX_CONNECTIONS = 20;
 
 const WS_SEARCH = /(ws)(s)?:\/\//;
@@ -44,6 +45,7 @@ if (chrome.browserAction.setIcon) {
         }
     });
 }
+
 
 function notification(title, message) {
     chrome.notifications.create({
@@ -128,12 +130,12 @@ function startDownload(baseUrl, downloadFinished) {
             return;
         }
 
-        if (running_tasks > MAX_CONNECTIONS) {
+        if (running_tasks >= MAX_CONNECTIONS) {
             waiting++;
             setTimeout(function () {
                 waiting--;
                 downloadFile(path, decompress, callback);
-            }, WAIT);
+            }, ((waiting * WAIT) <= MAX_WAIT) ? (waiting * WAIT) : MAX_WAIT);
         } else {
             walkedPaths.push(path);
             running_tasks++;
@@ -304,4 +306,9 @@ chrome.storage.local.get(["checked", "withExposedGit"], function (visitedSite) {
     }, {
         urls: ["<all_urls>"]
     });
+});
+
+// Reset download status at each start
+chrome.storage.local.set({
+    downloading: []
 });
