@@ -6,10 +6,20 @@ if (chrome.browserAction.setBadgeText) {
         text: ""
     });
     // set width for desktop devices
-    document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener("DOMContentLoaded", function () {
         document.getElementById("hostsFound").style.width = "380px";
     });
 }
+
+document.addEventListener("DOMContentLoaded", function () {
+    chrome.storage.local.get(["options"], function (options) {
+        let color = options.options.color;
+        let list = document.getElementsByClassName("custom-color");
+        for (let n = 0; n < list.length; ++n) {
+            list[n].className += " " + color;
+        }
+    });
+});
 
 function addElements(element, array, callback, downloading) {
 

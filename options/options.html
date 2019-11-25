@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>DotGit Options</title>
+    <meta charset="utf-8"/>
+    <link rel="stylesheet" type="text/css" href="options.css">
+    <script src="options.js"></script>
+</head>
+<body>
+<section class="option">
+    <div class="browser-style title-option">
+        Theme
+    </div>
+    <div class="browser-style title-option">
+        <label for="color">Color</label>
+        <select id="color" class="browser-style input-text">
+            <option value="grey">Grey</option>
+            <option value="red">Red</option>
+            <option value="green">Green</option>
+            <option value="blue">Blue</option>
+            <option value="yellow">Yellow</option>
+            <option value="orange">Orange</option>
+            <option value="purple">Purple</option>
+            <option value="pink">Pink</option>
+            <option value="brown">Brown</option>
+        </select>
+    </div>
+</section>
+<section class="option">
+    <div class="browser-style title-option">
+        Notification<br>
+    </div>
+    <div class="browser-style title-option">
+        New .git found
+        <input type="radio" id="on1" name="notification_new_git" value="on" checked/>
+        <label for="on1">On</label>
+
+        <input type="radio" id="off1" name="notification_new_git" value="off"/>
+        <label for="off1">Off</label>
+    </div>
+    <div class="browser-style title-option">
+        Download status
+        <input type="radio" id="on2" name="notification_download" value="on" checked/>
+        <label for="on2">On</label>
+
+        <input type="radio" id="off2" name="notification_download" value="off"/>
+        <label for="off2">Off</label>
+    </div>
+</section>
+<section class="option">
+    <div class="browser-style title-option">
+        Download<br>
+        By changing these values the browser may become unstable!<br>
+    </div>
+    <div>
+        <a href="https://github.com/davtur19/DotGit">Change them only if you know what you are doing</a><br><br>
+    </div>
+    <div class="browser-style title-option">
+        <label for="max_connections">Max simultaneous connections</label>
+        <input class="browser-style input-text" type="number" id="max_connections" min="1" max="1000"/>
+    </div>
+    <div class="browser-style title-option">
+        <label for="wait">Wait (ms)</label>
+        <input class="browser-style input-text" type="number" id="wait" min="1" max="10000"/>
+    </div>
+    <div class="browser-style title-option">
+        <label for="max_wait">Max wait (ms)</label>
+        <input class="browser-style input-text" type="number" id="max_wait" min="1" max="1000000"/>
+    </div>
+</section>
+<footer class="panel-section-footer">
+    <button class="footer-button default" id="reset_default">Reset to default settings</button>
+</footer>
+</body>
+</html>

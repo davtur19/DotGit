@@ -1,6 +1,15 @@
-const WAIT = 100;
-const MAX_WAIT = 10000;
-const MAX_CONNECTIONS = 20;
+const DEFAULT_OPTIONS = {
+    "color": "grey",
+    "notification": {
+        "new_git": true,
+        "download": true
+    },
+    "download": {
+        "wait": 100,
+        "max_wait": 10000,
+        "max_connections": 20
+    }
+};
 
 const WS_SEARCH = /(ws)(s)?:\/\//;
 const WS_REPLACE = "http$2://";
@@ -36,6 +45,11 @@ const GIT_WELL_KNOW_PATHS = [
     "info/exclude"
 ];
 
+let wait;
+let max_wait;
+let max_connections;
+let notification_new_git;
+let notification_download;
 
 // Not supported on Firefox for Android
 if (chrome.browserAction.setIcon) {
@@ -48,6 +62,16 @@ if (chrome.browserAction.setIcon) {
 
 
 function notification(title, message) {
+    if (title === "Download status") {
+        if (!notification_download) {
+            return true;
+        }
+    } else {
+        if (!notification_new_git) {
+            return true;
+        }
+    }
+
     chrome.notifications.create({
         type: "basic",
         iconUrl: chrome.extension.getURL("icons/dotgit-48.png"),
@@ -130,13 +154,19 @@ function startDownload(baseUrl, downloadFinished) {
             return;
         }
 
-        if (running_tasks >= MAX_CONNECTIONS) {
+        // waiting = number of pending downloads
+        // running_tasks = number of downloads in progress
+        // max_connections = maximum number of simultaneous connections
+        // wait = wait time based on pending downloads
+        // max_wait = max wait time
+        if (running_tasks >= max_connections) {
             waiting++;
             setTimeout(function () {
                 waiting--;
                 downloadFile(path, decompress, callback);
-            }, ((waiting * WAIT) <= MAX_WAIT) ? (waiting * WAIT) : MAX_WAIT);
+            }, ((waiting * wait) <= max_wait) ? (waiting * wait) : max_wait);
         } else {
+            //download
             walkedPaths.push(path);
             running_tasks++;
 
@@ -245,6 +275,14 @@ function startDownload(baseUrl, downloadFinished) {
 }
 
 
+function set_options(options) {
+    wait = options.download.wait;
+    max_wait = options.download.max_wait;
+    max_connections = options.download.max_connections;
+    notification_new_git = options.notification.new_git;
+    notification_download = options.notification.download;
+}
+
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     if (request.type === "download") {
         notification("Download status", "Download started\nPlease wait...");
@@ -272,21 +310,47 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
         });
     }
 
+    if (request.type === "notification_new_git") {
+        notification_new_git = request.value;
+        sendResponse({status: true});
+    } else if (request.type === "notification_download") {
+        notification_download = request.value;
+        sendResponse({status: true});
+    } else if (request.type === "max_connections") {
+        max_connections = request.value;
+        sendResponse({status: true});
+    } else if (request.type === "wait") {
+        wait = request.value;
+        sendResponse({status: true});
+    } else if (request.type === "max_wait") {
+        max_wait = request.value;
+        sendResponse({status: true});
+    } else if (request.type === "reset_options") {
+        chrome.storage.local.set({options: DEFAULT_OPTIONS});
+        set_options(DEFAULT_OPTIONS);
+        sendResponse({status: true, options: DEFAULT_OPTIONS});
+    }
+
     // this will keep the message channel open to the other end until sendResponse is called
     return true;
 });
 
 
-chrome.storage.local.get(["checked", "withExposedGit"], function (visitedSite) {
+chrome.storage.local.get(["checked", "withExposedGit", "options"], function (result) {
     // Initialize the saved stats if not yet initialized.
-    if (typeof visitedSite.checked === "undefined") {
-        visitedSite = {
+    if (typeof result.checked === "undefined") {
+        result = {
             checked: [],
-            withExposedGit: [],
-            downloading: []
+            withExposedGit: []
         };
-        chrome.storage.local.set(visitedSite);
+        chrome.storage.local.set(result);
     }
+    if (typeof result.options === "undefined") {
+        result.options = DEFAULT_OPTIONS;
+        chrome.storage.local.set({options: DEFAULT_OPTIONS});
+    }
+
+    set_options(result.options);
 
     chrome.webRequest.onCompleted.addListener(function (details) {
         let url = new URL(details["url"])["origin"];
@@ -298,10 +362,10 @@ chrome.storage.local.get(["checked", "withExposedGit"], function (visitedSite) {
         }
 
         // save visited sites
-        if (visitedSite.checked.includes(url) === false) {
-            visitedSite.checked.push(url);
-            chrome.storage.local.set(visitedSite);
-            checkGit(url, visitedSite);
+        if (result.checked.includes(url) === false) {
+            result.checked.push(url);
+            chrome.storage.local.set(result);
+            checkGit(url, result);
         }
     }, {
         urls: ["<all_urls>"]

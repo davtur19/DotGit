@@ -7,6 +7,7 @@ An extension to check if .git is exposed in visited websites
 - List of sites found with the .git folder
 - Download the entire .git folder in zip format, even if the files are not listed on the site
 - View .git/config with one click
+- Options for: colors, notifications and downloads
 
 ## Screenshot
 ![ScreenShot](https://i.imgur.com/c9qq5zG.png)

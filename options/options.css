@@ -1,0 +1,32 @@
+@media (prefers-color-scheme: dark) {
+    body {
+        background-color: #202023;
+        color: #f9f9fa;
+    }
+}
+
+.option {
+    display: flex;
+    flex-direction: column;
+    margin-top: 10px;
+    border-bottom: 1px solid rgba(249, 249, 250, 0.2);
+}
+
+.title-option {
+    align-items: center;
+    display: flex;
+    font-weight: 600;
+}
+
+.input-text {
+    margin-left: 29px;
+    max-width: 320px;
+}
+
+a:visited {
+    color: #0060df;
+}
+
+a:hover {
+    color: #45a1ff;
+}
