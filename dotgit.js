@@ -140,7 +140,7 @@ function startDownload(baseUrl, downloadFinished) {
             zip.generateAsync({type: "blob"}).then(function (content) {
                 // download zip
                 const url = URL.createObjectURL(content);
-                let filename = baseUrl.replace(/^http(s?):\/\//i, "").replace(".", "_");
+                let filename = baseUrl.replace(/^http(s?):\/\//i, "").replace(/\./g, "_");
                 chrome.downloads.download({url: url, filename: `${filename}.zip`});
                 downloadFinished(fileExist);
             });
