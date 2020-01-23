@@ -130,17 +130,17 @@ function startDownload(baseUrl, downloadFinished) {
     // make zip
     function downloadZip() {
         if (running_tasks === 0 && waiting === 0) {
-            let zip = new JSZip();
             notification("Download status", "Creating zip...");
+            let zip = new JSZip();
+            let filename = baseUrl.replace(/^http(s?):\/\//i, "").replace(/\./g, "_");
 
             downloadedFiles.forEach(function (file) {
-                zip.file(file[0], file[1], {arrayBuffer: true});
+                zip.file(filename + GIT_PATH + file[0], file[1], {arrayBuffer: true});
             });
 
             zip.generateAsync({type: "blob"}).then(function (content) {
                 // download zip
                 const url = URL.createObjectURL(content);
-                let filename = baseUrl.replace(/^http(s?):\/\//i, "").replace(/\./g, "_");
                 chrome.downloads.download({url: url, filename: `${filename}.zip`});
                 downloadFinished(fileExist);
             });
