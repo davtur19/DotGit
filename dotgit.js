@@ -26,6 +26,7 @@ const GIT_PACK_EXT = ".pack";
 const GIT_IDX_EXT = ".idx";
 const SHA1_SIZE = 20;
 const GIT_BLOB_DELIMITER = String.fromCharCode(0);
+const STATUS_DESCRIPTION = "HTTP Status code for downloaded files: 200 Good, 404 Normal, 403 and 5XX Bad\n";
 
 const GIT_WELL_KNOW_PATHS = [
     "HEAD",
@@ -117,6 +118,7 @@ function startDownload(baseUrl, downloadFinished) {
 
     let running_tasks = 0;
     let fileExist = false;
+    let downloadStats = {};
 
     // slow conversion
     function arrayBufferToString(buffer) {
@@ -135,16 +137,22 @@ function startDownload(baseUrl, downloadFinished) {
             notification("Download status", "Creating zip...");
             let zip = new JSZip();
             let filename = baseUrl.replace(/^http(s?):\/\//i, "").replace(/\./g, "_");
+            let strStatus = STATUS_DESCRIPTION;
 
             downloadedFiles.forEach(function (file) {
                 zip.file(filename + GIT_PATH + file[0], file[1], {arrayBuffer: true});
             });
 
+            Object.keys(downloadStats).forEach(function (key) {
+                strStatus += "\n" + key + ": " + downloadStats[key];
+            });
+            zip.file("DownloadStats.txt", strStatus);
+
             zip.generateAsync({type: "blob"}).then(function (content) {
                 // download zip
                 const url = URL.createObjectURL(content);
                 chrome.downloads.download({url: url, filename: `${filename}.zip`});
-                downloadFinished(fileExist);
+                downloadFinished(fileExist, downloadStats);
             });
         }
     }
@@ -175,6 +183,7 @@ function startDownload(baseUrl, downloadFinished) {
             fetch(baseUrl + GIT_PATH + path, {
                 redirect: "manual"
             }).then(function (response) {
+                downloadStats[response.status] = (typeof downloadStats[response.status] === "undefined") ? 1 : downloadStats[response.status] + 1;
                 if (response.ok && response.status === 200) {
                     fileExist = true;
                     return response.arrayBuffer();
@@ -289,7 +298,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     if (request.type === "download") {
         notification("Download status", "Download started\nPlease wait...");
 
-        startDownload(request.url, function (fileExist) {
+        startDownload(request.url, function (fileExist, downloadStats) {
+            let strStatus = "";
+
             chrome.storage.local.get(["downloading"], function (downloading) {
                 if (typeof downloading.downloading !== "undefined" && downloading.downloading.length !== 0) {
                     let index = downloading.downloading.indexOf(request.url);
@@ -302,11 +313,14 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                 }
             });
 
+            Object.keys(downloadStats).forEach(function (key) {
+                strStatus += key + ": " + downloadStats[key] + "\n";
+            });
             if (fileExist) {
-                notification("Download status", "Downloaded " + request.url);
+                notification("Download status", "Downloaded " + request.url + "\n" + strStatus);
                 sendResponse({status: true});
             } else {
-                notification("Download status", "Failed to download " + request.url + "\nNo files found");
+                notification("Download status", "Failed to download " + request.url + "\nNo files found\n" + strStatus);
                 sendResponse({status: false});
             }
         });
