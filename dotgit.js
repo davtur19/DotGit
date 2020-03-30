@@ -136,7 +136,7 @@ function startDownload(baseUrl, downloadFinished) {
         if (running_tasks === 0 && waiting === 0) {
             notification("Download status", "Creating zip...");
             let zip = new JSZip();
-            let filename = baseUrl.replace(/^http(s?):\/\//i, "").replace(/\./g, "_");
+            let filename = baseUrl.replace(/^http(s?):\/\//i, "").replace(/[.:@]/g, "_");
             let strStatus = STATUS_DESCRIPTION;
 
             downloadedFiles.forEach(function (file) {
