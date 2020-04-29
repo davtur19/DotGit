@@ -1,5 +1,3 @@
-const MAX_ITEMS = 100;
-
 // Not supported on Firefox for Android
 if (chrome.browserAction.setBadgeText) {
     chrome.browserAction.setBadgeText({
@@ -18,13 +16,16 @@ document.addEventListener("DOMContentLoaded", function () {
         for (let n = 0; n < list.length; ++n) {
             list[n].className += " " + color;
         }
+        let max_sites = options.options.max_sites
+        let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
+        hostElementFoundTitle.textContent = "0 out of " + max_sites + " shown";
     });
 });
 
-function addElements(element, array, callback, downloading) {
+function addElements(element, array, callback, downloading, max_sites) {
 
     for (let i = array.length - 1; i > -1; i--) {
-        if (i <= array.length - MAX_ITEMS) {
+        if (i <= array.length - max_sites) {
             break;
         }
 
@@ -100,20 +101,21 @@ document.addEventListener("click", (e) => {
 });
 
 
-chrome.storage.local.get(["withExposedGit", "downloading"], function (visitedSite) {
+chrome.storage.local.get(["withExposedGit", "downloading", "options"], function (visitedSite) {
     if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
         let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
-        hostElementFoundTitle.textContent = visitedSite.withExposedGit.length + " out of " + MAX_ITEMS + " shown";
+        let max_sites = visitedSite.options.max_sites
+        hostElementFoundTitle.textContent = visitedSite.withExposedGit.length + " out of " + max_sites + " shown";
 
         let hostElementFound = document.getElementById("hostsFound");
         if (typeof visitedSite.downloading !== "undefined" && visitedSite.downloading.length !== 0) {
             addElements(hostElementFound, visitedSite.withExposedGit, function (url) {
                 return `${url}`;
-            }, visitedSite.downloading);
+            }, visitedSite.downloading, max_sites);
         } else {
             addElements(hostElementFound, visitedSite.withExposedGit, function (url) {
                 return `${url}`;
-            }, []);
+            }, [], max_sites);
         }
     }
 });

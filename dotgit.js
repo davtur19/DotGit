@@ -1,5 +1,6 @@
 const DEFAULT_OPTIONS = {
     "color": "grey",
+    "max_sites": 100,
     "notification": {
         "new_git": true,
         "download": true

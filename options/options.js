@@ -5,6 +5,7 @@ function set_gui(options) {
             document.getElementById("color").selectedIndex = i;
         }
     }
+    document.getElementById("max_sites").value = options.max_sites;
     document.getElementById("max_connections").value = options.download.max_connections;
     document.getElementById("wait").value = options.download.wait;
     document.getElementById("max_wait").value = options.download.max_wait;
@@ -21,6 +22,9 @@ document.addEventListener("DOMContentLoaded", function () {
         document.addEventListener("change", (e) => {
             if (e.target.id === "color") {
                 result.options.color = e.target.value;
+                chrome.storage.local.set(result);
+            } else if (e.target.validity.valid === true && (e.target.id === "max_sites")) {
+                result.options.max_sites = e.target.value;
                 chrome.storage.local.set(result);
             } else if (e.target.name === "notification_new_git") {
                 result.options.notification.new_git = (e.target.value === "on");
