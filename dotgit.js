@@ -295,6 +295,18 @@ function set_options(options) {
     notification_download = options.notification.download;
 }
 
+function checkOptions(default_options, storage_options) {
+    for (let [key] of Object.entries(default_options)) {
+        if (typeof storage_options[key] === "object") {
+            storage_options[key] = checkOptions(default_options[key], storage_options[key]);
+        } else if (typeof storage_options[key] === "undefined") {
+            storage_options[key] = default_options[key];
+        }
+    }
+    return storage_options;
+}
+
+
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     if (request.type === "download") {
         notification("Download status", "Download started\nPlease wait...");
@@ -366,6 +378,8 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
         result.options = DEFAULT_OPTIONS;
         chrome.storage.local.set({options: DEFAULT_OPTIONS});
     }
+
+    chrome.storage.local.set({options: checkOptions(DEFAULT_OPTIONS, result.options)});
 
     set_options(result.options);
 
