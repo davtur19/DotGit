@@ -55,15 +55,6 @@ let max_connections;
 let notification_new_git;
 let notification_download;
 
-// Not supported on Firefox for Android
-if (chrome.browserAction.setIcon) {
-    chrome.browserAction.setIcon({
-        path: {
-            32: "icons/dotgit-32.png"
-        }
-    });
-}
-
 
 function notification(title, message) {
     if (title === "Download status") {
