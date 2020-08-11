@@ -76,6 +76,21 @@ function notification(title, message) {
 }
 
 
+function sendDownloadStatus(url, downloadStatus) {
+    let message = {
+        type: "downloadStatus",
+        url: url,
+        downloadStatus: downloadStatus
+    }
+
+    chrome.runtime.sendMessage(message, function () {
+        // suppress error for sendMessage
+        // noinspection BadExpressionStatementJS
+        chrome.runtime.lastError;
+    })
+}
+
+
 function checkGit(url, visitedSite) {
     let to_check = url + GIT_HEAD_PATH;
 
@@ -109,8 +124,15 @@ function startDownload(baseUrl, downloadFinished) {
     const walkedPaths = [];
 
     let running_tasks = 0;
+    let waiting = 0;
     let fileExist = false;
     let downloadStats = {};
+
+    let downloadStatus = {
+        successful: 0,
+        failed: 0,
+        total: 0
+    }
 
     // slow conversion
     function arrayBufferToString(buffer) {
@@ -149,7 +171,6 @@ function startDownload(baseUrl, downloadFinished) {
         }
     }
 
-    let waiting = 0;
 
     function downloadFile(path, decompress, callback) {
         if (walkedPaths.includes(path)) {
@@ -171,6 +192,7 @@ function startDownload(baseUrl, downloadFinished) {
             //download
             walkedPaths.push(path);
             running_tasks++;
+            downloadStatus.total++;
 
             fetch(baseUrl + GIT_PATH + path, {
                 redirect: "manual"
@@ -178,12 +200,16 @@ function startDownload(baseUrl, downloadFinished) {
                 downloadStats[response.status] = (typeof downloadStats[response.status] === "undefined") ? 1 : downloadStats[response.status] + 1;
                 if (response.ok && response.status === 200) {
                     fileExist = true;
+                    downloadStatus.successful++;
                     return response.arrayBuffer();
                 }
                 running_tasks--;
+                downloadStatus.failed++;
+                sendDownloadStatus(baseUrl, downloadStatus);
             }).then(function (buffer) {
                 if (typeof buffer !== "undefined") {
                     downloadedFiles.push([path, buffer]);
+                    // noinspection JSCheckFunctionSignatures
                     const words = new Uint8Array(buffer);
 
                     if (decompress) {
@@ -286,6 +312,7 @@ function set_options(options) {
     notification_download = options.notification.download;
 }
 
+
 function checkOptions(default_options, storage_options) {
     for (let [key] of Object.entries(default_options)) {
         if (typeof storage_options[key] === "object") {
@@ -328,9 +355,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                 sendResponse({status: false});
             }
         });
-    }
-
-    if (request.type === "notification_new_git") {
+    } else if (request.type === "notification_new_git") {
         notification_new_git = request.value;
         sendResponse({status: true});
     } else if (request.type === "notification_download") {

@@ -25,3 +25,9 @@ ul.collection {
     height: auto;
     transform: translateY(-2px);
 }
+
+.download-status {
+    padding: 0 10px;
+    height: auto;
+    color: black;
+}
