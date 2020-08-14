@@ -84,8 +84,6 @@ function addElements(element, array, callback, downloading, max_sites) {
 
 document.addEventListener("click", (event) => {
     const button = event.target;
-    // noinspection JSUnresolvedVariable
-    const url = button.parentElement.nextElementSibling.nextElementSibling.innerText;
 
     if (button.id === "reset") {
         chrome.storage.local.set({
@@ -95,6 +93,9 @@ document.addEventListener("click", (event) => {
         });
         chrome.runtime.reload();
     } else if (button.classList.contains("download")) {
+        // noinspection JSUnresolvedVariable
+        const url = button.parentElement.nextElementSibling.nextElementSibling.innerText;
+
         button.setAttribute("class", "material-icons btn-small blue disabled");
         chrome.storage.local.get(["downloading"], function (downloading) {
             if (typeof downloading.downloading !== "undefined" && downloading.downloading.length !== 0) {
