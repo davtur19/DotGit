@@ -116,6 +116,14 @@ document.addEventListener("click", (event) => {
         }, function () {
             button.setAttribute("class", "material-icons btn-small blue download");
         });
+    } else if (button.id === "options") {
+        if (chrome.runtime.openOptionsPage) {
+            chrome.runtime.openOptionsPage();
+        } else {
+            window.open(chrome.runtime.getURL('options.html'));
+        }
+    } else if (button.id === "about") {
+        window.open(chrome.runtime.getURL('about.html'));
     }
 });
 
@@ -124,7 +132,7 @@ chrome.storage.local.get(["withExposedGit", "downloading", "options"], function 
     if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
         let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
         let max_sites = visitedSite.options.max_sites
-        hostElementFoundTitle.textContent = "Total found: " + visitedSite.withExposedGit.length + "Max shown: " + max_sites;
+        hostElementFoundTitle.textContent = "Total found: " + visitedSite.withExposedGit.length + " Max shown: " + max_sites;
 
         let hostElementFound = document.getElementById("hostsFound");
         if (typeof visitedSite.downloading !== "undefined" && visitedSite.downloading.length !== 0) {

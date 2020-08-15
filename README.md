@@ -14,6 +14,6 @@ An extension to check if .git is exposed in visited websites
 - Options for: colors, notifications and downloads
 
 ## Screenshot
-![ScreenShot](https://i.imgur.com/c9qq5zG.png)
+![ScreenShot](https://user-images.githubusercontent.com/13476215/90319561-98ecb100-df39-11ea-876a-cc3c6d762932.png)
 
 ## Download: [Firefox](https://addons.mozilla.org/it/firefox/addon/dotgit/) | [Chrome](https://chrome.google.com/webstore/detail/dotgit/pampamgoihgcedonnphgehgondkhikel)
