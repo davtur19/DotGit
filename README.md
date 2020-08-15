@@ -13,6 +13,15 @@ An extension to check if .git is exposed in visited websites
 - View .git/config with one click
 - Options for: colors, notifications and downloads
 
+## How the download works
+There is a queue for downloads, with a **maximum of simultaneous connections**; if this number is exceeded, subsequent files are put on **wait** for X ms multiplied by the number of downloads already pending; the result of the multiplication cannot exceed the **maximum wait**
+
+More info [here](https://github.com/davtur19/DotGit/blob/b0f589dfd78396990b8d17e4268bd68471b4ff53/dotgit.js#L180-L192)
+
+### Note:
+- Downloading is an extra feature to DotGit, it is not meant to download large repositories (there are limits to the memory usable by extensions, and DotGit does everything in RAM)
+- Changing the download settings is recommended as by default the values are kept low to avoid problems for those who do not have a good connection or a good CPU, however too high values could freeze the browser even on powerful computers
+
 ## Screenshot
 ![ScreenShot](https://user-images.githubusercontent.com/13476215/90319561-98ecb100-df39-11ea-876a-cc3c6d762932.png)
 
