@@ -19,7 +19,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         let max_sites = options.options.max_sites
         let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
-        hostElementFoundTitle.textContent = "0 out of " + max_sites + " shown";
+        hostElementFoundTitle.textContent = "Total found: 0 Max shown: " + max_sites;
     });
 });
 
@@ -124,7 +124,7 @@ chrome.storage.local.get(["withExposedGit", "downloading", "options"], function 
     if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
         let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
         let max_sites = visitedSite.options.max_sites
-        hostElementFoundTitle.textContent = visitedSite.withExposedGit.length + " out of " + max_sites + " shown";
+        hostElementFoundTitle.textContent = "Total found: " + visitedSite.withExposedGit.length + "Max shown: " + max_sites;
 
         let hostElementFound = document.getElementById("hostsFound");
         if (typeof visitedSite.downloading !== "undefined" && visitedSite.downloading.length !== 0) {
