@@ -3,12 +3,12 @@
 [![Chrome users](https://img.shields.io/chrome-web-store/users/pampamgoihgcedonnphgehgondkhikel?label=Chrome%20users)](https://chrome.google.com/webstore/detail/dotgit/pampamgoihgcedonnphgehgondkhikel)
 
 # DotGit
-An extension to check if .git is exposed in visited websites
+An extension for checking if .git is exposed in visited websites
 
 ## Features
-- Check if a .git folder exists for each site you visit
-- You will be notified when a .git folder is found
-- List of sites found with the .git folder
+- Check if a .git/.svn/.hg folder exists for each site you visit
+- You will be notified when a folder is found
+- List of exposed sites found
 - Download the entire .git folder in zip format, even if the files are not listed on the site
 - View .git/config with one click
 - Options for: colors, notifications and downloads
@@ -21,6 +21,7 @@ More info [here](https://github.com/davtur19/DotGit/blob/b0f589dfd78396990b8d17e
 ### Note:
 - Downloading is an extra feature to DotGit, it is not meant to download large repositories (there are limits to the memory usable by extensions, and DotGit does everything in RAM)
 - Changing the download settings is recommended as by default the values are kept low to avoid problems for those who do not have a good connection or a good CPU, however too high values could freeze the browser even on powerful computers
+- By default svn and mercurial are disabled, to activate them just go to settings and turn them on
 
 ## Screenshot
 ![ScreenShot](https://user-images.githubusercontent.com/13476215/90319561-98ecb100-df39-11ea-876a-cc3c6d762932.png)

@@ -50,32 +50,41 @@ function addElements(element, array, callback, downloading, max_sites) {
         const spanIcon = document.createElement("span");
         spanIcon.setAttribute("class", "secondary-content");
 
-        const spanDownloadStatus = document.createElement("span");
-        spanDownloadStatus.setAttribute("class", "secondary-content truncate");
-
-        const btnDownload = document.createElement("i");
-        if (downloading.includes(callback(array[i]))) {
-            btnDownload.setAttribute("class", "material-icons btn-small blue disabled");
-        } else {
-            btnDownload.setAttribute("class", "material-icons btn-small blue download");
-        }
-        btnDownload.innerText = "file_download";
-
-        const downloadStatus = document.createElement("div");
-        downloadStatus.setAttribute("class", "download-status");
-        downloadStatus.setAttribute("id", "ds:" + callback(array[i]))
-        downloadStatus.setAttribute("title", "success/failed/total");
-        downloadStatus.innerText = "";
-
         const link = document.createElement("a");
-        link.setAttribute("href", callback(array[i]) + "/.git/config");
-        link.innerText = callback(array[i]);
+
+        if (callback(array[i].type) === "git") {
+            const spanDownloadStatus = document.createElement("span");
+            spanDownloadStatus.setAttribute("class", "secondary-content truncate");
+
+            const btnDownload = document.createElement("i");
+            if (downloading.includes(callback(array[i]))) {
+                btnDownload.setAttribute("class", "material-icons btn-small blue disabled");
+            } else {
+                btnDownload.setAttribute("class", "material-icons btn-small blue download");
+            }
+            btnDownload.innerText = "file_download";
+
+            const downloadStatus = document.createElement("div");
+            downloadStatus.setAttribute("class", "download-status");
+            downloadStatus.setAttribute("id", "ds:" + callback(array[i].url))
+            downloadStatus.setAttribute("title", "success/failed/total");
+            downloadStatus.innerText = "";
+
+            link.setAttribute("href", callback(array[i].url) + "/.git/config");
+            spanIcon.appendChild(btnDownload);
+            spanDownloadStatus.appendChild(downloadStatus);
+            listItem.appendChild(spanIcon);
+            listItem.appendChild(spanDownloadStatus);
+        }
+        if (callback(array[i].type) === "svn") {
+            link.setAttribute("href", callback(array[i].url) + "/.svn/");
+        }
+        if (callback(array[i].type) === "hg") {
+            link.setAttribute("href", callback(array[i].url) + "/.hg/");
+        }
+        link.innerText = callback(array[i].url);
 
         spanLink.appendChild(link);
-        spanIcon.appendChild(btnDownload);
-        spanDownloadStatus.appendChild(downloadStatus);
-        listItem.appendChild(spanIcon);
-        listItem.appendChild(spanDownloadStatus);
         listItem.appendChild(spanLink);
         element.appendChild(listItem);
     }

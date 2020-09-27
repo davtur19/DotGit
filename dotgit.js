@@ -1,4 +1,9 @@
 const DEFAULT_OPTIONS = {
+    "functions": {
+        "git": true,
+        "svn": false,
+        "hg": false
+    },
     "color": "grey",
     "max_sites": 100,
     "notification": {
@@ -18,6 +23,20 @@ const WS_REPLACE = "http$2://";
 const GIT_PATH = "/.git/";
 const GIT_HEAD_PATH = GIT_PATH + "HEAD";
 const GIT_HEAD_HEADER = "ref: refs/heads/";
+
+const SVN_PATH = "/.svn/";
+const SVN_DB_PATH = SVN_PATH + "wc.db";
+const SVN_DB_HEADER = "SQLite";
+
+const HG_PATH = "/.hg/";
+const HG_MANIFEST_PATH = HG_PATH + "store/00manifest.i";
+const HG_MANIFEST_HEADERS = [
+    "\u0000\u0000\u0000\u0001",
+    "\u0000\u0001\u0000\u0001",
+    "\u0000\u0002\u0000\u0001",
+    "\u0000\u0003\u0000\u0001",
+];
+
 const GIT_TREE_HEADER = "tree ";
 const GIT_OBJECTS_PATH = "objects/";
 const GIT_OBJECTS_SEARCH = "[a-f0-9]{40}";
@@ -56,6 +75,9 @@ let max_wait;
 let max_connections;
 let notification_new_git;
 let notification_download;
+let check_git;
+let check_svn;
+let check_hg;
 
 
 function notification(title, message) {
@@ -92,6 +114,19 @@ function sendDownloadStatus(url, downloadStatus) {
     })
 }
 
+// WONTFIX it may happen that the badge is set at the same time by several checks, in this way it could be increased only once
+function setBadge() {
+    // Not supported on Firefox for Android
+    if (chrome.browserAction.setBadgeText) {
+        chrome.browserAction.getBadgeText({}, function (result) {
+            let n = parseInt(result);
+            let text = (isNaN(n) ? 0 : n) + 1;
+            chrome.browserAction.setBadgeText({
+                text: text.toString()
+            });
+        });
+    }
+}
 
 function checkGit(url, visitedSite) {
     let to_check = url + GIT_HEAD_PATH;
@@ -106,16 +141,60 @@ function checkGit(url, visitedSite) {
     }).then(function (text) {
         if (text !== false && text.startsWith(GIT_HEAD_HEADER) === true) {
             // .git found
-            visitedSite.withExposedGit.push(url);
+            visitedSite.withExposedGit.push({type: "git", url: url});
             chrome.storage.local.set(visitedSite);
-            // Not supported on Firefox for Android
-            if (chrome.browserAction.setBadgeText) {
-                chrome.browserAction.setBadgeText({
-                    text: visitedSite.withExposedGit.length.toString()
-                });
-            }
+            setBadge();
 
             notification("Found an exposed .git", to_check);
+        }
+    });
+}
+
+function checkSvn(url, visitedSite) {
+    let to_check = url + SVN_DB_PATH;
+
+    fetch(to_check, {
+        redirect: "manual"
+    }).then(function (response) {
+        if (response.status === 200) {
+            return response.text();
+        }
+        return false;
+    }).then(function (text) {
+        if (text !== false && text.startsWith(SVN_DB_HEADER) === true) {
+            // .svn found
+            visitedSite.withExposedGit.push({type: "svn", url: url});
+            chrome.storage.local.set(visitedSite);
+            setBadge();
+
+            notification("Found an exposed .svn", to_check);
+        }
+    });
+}
+
+function checkHg(url, visitedSite) {
+    let to_check = url + HG_MANIFEST_PATH;
+
+    fetch(to_check, {
+        redirect: "manual"
+    }).then(function (response) {
+        if (response.status === 200) {
+            return response.text();
+        }
+        return false;
+    }).then(function (text) {
+        if (text !== false && (
+            text.startsWith(HG_MANIFEST_HEADERS[0]) === true ||
+            text.startsWith(HG_MANIFEST_HEADERS[1]) === true ||
+            text.startsWith(HG_MANIFEST_HEADERS[2]) === true ||
+            text.startsWith(HG_MANIFEST_HEADERS[3]) === true)
+        ) {
+            // .hg found
+            visitedSite.withExposedGit.push({type: "hg", url: url});
+            chrome.storage.local.set(visitedSite);
+            setBadge();
+
+            notification("Found an exposed .hg", to_check);
         }
     });
 }
@@ -312,6 +391,9 @@ function set_options(options) {
     max_connections = options.download.max_connections;
     notification_new_git = options.notification.new_git;
     notification_download = options.notification.download;
+    check_git = options.functions.git;
+    check_svn = options.functions.svn;
+    check_hg = options.functions.hg;
 }
 
 
@@ -357,6 +439,15 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                 sendResponse({status: false});
             }
         });
+    } else if (request.type === "git") {
+        check_git = request.value;
+        sendResponse({status: true});
+    } else if (request.type === "svn") {
+        check_svn = request.value;
+        sendResponse({status: true});
+    } else if (request.type === "hg") {
+        check_hg = request.value;
+        sendResponse({status: true});
     } else if (request.type === "notification_new_git") {
         notification_new_git = request.value;
         sendResponse({status: true});
@@ -396,6 +487,16 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
         result.options = DEFAULT_OPTIONS;
         chrome.storage.local.set({options: DEFAULT_OPTIONS});
     }
+    // upgrade 3.7.4 => 4.0
+    if (typeof result.options.functions === "undefined") {
+        let urls = [];
+        result.options.functions = DEFAULT_OPTIONS.functions;
+        result.withExposedGit.forEach(function (url) {
+            urls.push({type: "git", url: url});
+        });
+        result.withExposedGit = urls;
+        chrome.runtime.reload();
+    }
 
     chrome.storage.local.set({options: checkOptions(DEFAULT_OPTIONS, result.options)});
 
@@ -411,10 +512,25 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
         }
 
         // save visited sites
+        let save = false;
         if (result.checked.includes(url) === false) {
-            result.checked.push(url);
-            chrome.storage.local.set(result);
-            checkGit(url, result);
+            if (check_git) {
+                checkGit(url, result);
+                save = true;
+            }
+            if (check_svn) {
+                checkSvn(url, result);
+                save = true;
+            }
+            if (check_hg) {
+                checkHg(url, result);
+                save = true;
+            }
+            // save only if a check is done
+            if (save) {
+                result.checked.push(url);
+                chrome.storage.local.set(result);
+            }
         }
     }, {
         urls: ["<all_urls>"]
