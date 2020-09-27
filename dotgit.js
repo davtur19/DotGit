@@ -488,14 +488,14 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
         chrome.storage.local.set({options: DEFAULT_OPTIONS});
     }
     // upgrade 3.7.4 => 4.0
-    if (typeof result.options.functions === "undefined") {
+    if (typeof result.options.functions === "undefined" || typeof result.withExposedGit[0].type === "undefined") {
         let urls = [];
         result.options.functions = DEFAULT_OPTIONS.functions;
         result.withExposedGit.forEach(function (url) {
             urls.push({type: "git", url: url});
         });
         result.withExposedGit = urls;
-        chrome.runtime.reload();
+        chrome.storage.local.set({withExposedGit: result.withExposedGit});
     }
 
     chrome.storage.local.set({options: checkOptions(DEFAULT_OPTIONS, result.options)});
