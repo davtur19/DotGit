@@ -39,11 +39,13 @@ const GIT_WELL_KNOW_PATHS = [
     "packed-refs",
     "objects/info/packs",
     "refs/heads/master",
+    "refs/heads/main",
     "refs/remotes/origin/HEAD",
     "refs/stash",
     "logs/HEAD",
     "logs/refs/stash",
     "logs/refs/heads/master",
+    "logs/refs/heads/main",
     "logs/refs/remotes/origin/HEAD",
     "info/refs",
     "info/exclude"
