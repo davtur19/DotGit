@@ -13,7 +13,8 @@ const DEFAULT_OPTIONS = {
     "download": {
         "wait": 100,
         "max_wait": 10000,
-        "max_connections": 20
+        "max_connections": 20,
+        "failed_in_a_row": 250
     }
 };
 
@@ -78,6 +79,7 @@ let notification_download;
 let check_git;
 let check_svn;
 let check_hg;
+let failed_in_a_row;
 
 
 function notification(title, message) {
@@ -208,7 +210,7 @@ function startDownload(baseUrl, downloadFinished) {
     let waiting = 0;
     let fileExist = false;
     let downloadStats = {};
-
+    let failedInARow = 0;
     let downloadStatus = {
         successful: 0,
         failed: 0,
@@ -255,6 +257,11 @@ function startDownload(baseUrl, downloadFinished) {
 
     function downloadFile(path, decompress, callback) {
         if (walkedPaths.includes(path)) {
+            downloadZip();
+            return;
+        }
+        if (failedInARow > failed_in_a_row) {
+            downloadZip();
             return;
         }
 
@@ -282,10 +289,13 @@ function startDownload(baseUrl, downloadFinished) {
                 if (response.ok && response.status === 200) {
                     fileExist = true;
                     downloadStatus.successful++;
+                    failedInARow = 0;
+                    sendDownloadStatus(baseUrl, downloadStatus);
                     return response.arrayBuffer();
                 }
                 running_tasks--;
                 downloadStatus.failed++;
+                failedInARow++;
                 sendDownloadStatus(baseUrl, downloadStatus);
             }).then(function (buffer) {
                 if (typeof buffer !== "undefined") {
@@ -389,6 +399,7 @@ function set_options(options) {
     wait = options.download.wait;
     max_wait = options.download.max_wait;
     max_connections = options.download.max_connections;
+    failed_in_a_row = options.download.failed_in_a_row;
     notification_new_git = options.notification.new_git;
     notification_download = options.notification.download;
     check_git = options.functions.git;
@@ -463,6 +474,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     } else if (request.type === "max_wait") {
         max_wait = request.value;
         sendResponse({status: true});
+    } else if (request.type === "failed_in_a_row") {
+        failed_in_a_row = request.value;
+        sendResponse({status: true});
     } else if (request.type === "reset_options") {
         chrome.storage.local.set({options: DEFAULT_OPTIONS});
         set_options(DEFAULT_OPTIONS);
@@ -488,13 +502,18 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
         chrome.storage.local.set({options: DEFAULT_OPTIONS});
     }
     // upgrade 3.7.4 => 4.0
-    if (typeof result.options.functions === "undefined" || typeof result.withExposedGit[0].type === "undefined") {
+    if (typeof result.options.functions === "undefined" || (typeof result.withExposedGit[0] !== "undefined" && typeof result.withExposedGit[0].type === "undefined")) {
         let urls = [];
         result.options.functions = DEFAULT_OPTIONS.functions;
         result.withExposedGit.forEach(function (url) {
             urls.push({type: "git", url: url});
         });
         result.withExposedGit = urls;
+        chrome.storage.local.set({withExposedGit: result.withExposedGit});
+    }
+    // upgrade 4.0 => 4.1
+    if (typeof result.options.download.failed_in_a_row === "undefined") {
+        result.options.download.failed_in_a_row = DEFAULT_OPTIONS.download.failed_in_a_row;
         chrome.storage.local.set({withExposedGit: result.withExposedGit});
     }
 
