@@ -11,6 +11,8 @@ function set_gui(options) {
     document.getElementById("svnOff").checked = !options.functions.svn;
     document.getElementById("hgOn").checked = options.functions.hg;
     document.getElementById("hgOff").checked = !options.functions.hg;
+    document.getElementById("envOn").checked = options.functions.env;
+    document.getElementById("envOff").checked = !options.functions.env;
     document.getElementById("max_sites").value = options.max_sites;
     document.getElementById("max_connections").value = options.download.max_connections;
     document.getElementById("failed_in_a_row").value = options.download.failed_in_a_row;
@@ -49,6 +51,14 @@ document.addEventListener("DOMContentLoaded", function () {
                 chrome.runtime.sendMessage({
                     type: e.target.name,
                     value: result.options.functions.hg
+                }, function (response) {
+                });
+            } else if (e.target.name === "env") {
+                result.options.functions.env = (e.target.value === "on");
+                chrome.storage.local.set(result);
+                chrome.runtime.sendMessage({
+                    type: e.target.name,
+                    value: result.options.functions.env
                 }, function (response) {
                 });
             } else if (e.target.id === "color") {

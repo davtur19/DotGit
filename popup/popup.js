@@ -82,6 +82,9 @@ function addElements(element, array, callback, downloading, max_sites) {
         if (callback(array[i].type) === "hg") {
             link.setAttribute("href", callback(array[i].url) + "/.hg/");
         }
+        if (callback(array[i].type) === "env") {
+            link.setAttribute("href", callback(array[i].url) + "/.env");
+        }
         link.innerText = callback(array[i].url);
 
         spanLink.appendChild(link);

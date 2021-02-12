@@ -2,7 +2,8 @@ const DEFAULT_OPTIONS = {
     "functions": {
         "git": true,
         "svn": false,
-        "hg": false
+        "hg": false,
+        "env": false
     },
     "color": "grey",
     "max_sites": 100,
@@ -37,6 +38,9 @@ const HG_MANIFEST_HEADERS = [
     "\u0000\u0002\u0000\u0001",
     "\u0000\u0003\u0000\u0001",
 ];
+
+const ENV_PATH = "/.env";
+const ENV_SEARCH = "^[A-Z_]*=";
 
 const GIT_TREE_HEADER = "tree ";
 const GIT_OBJECTS_PATH = "objects/";
@@ -79,6 +83,7 @@ let notification_download;
 let check_git;
 let check_svn;
 let check_hg;
+let check_env;
 let failed_in_a_row;
 
 
@@ -197,6 +202,29 @@ function checkHg(url, visitedSite) {
             setBadge();
 
             notification("Found an exposed .hg", to_check);
+        }
+    });
+}
+
+function checkEnv(url, visitedSite) {
+    let to_check = url + ENV_PATH;
+    const search = new RegExp(ENV_SEARCH, "gm");
+
+    fetch(to_check, {
+        redirect: "manual"
+    }).then(function (response) {
+        if (response.status === 200) {
+            return response.text();
+        }
+        return false;
+    }).then(function (text) {
+        if (text !== false && search.test(text) === true) {
+            // .env found
+            visitedSite.withExposedGit.push({type: "env", url: url});
+            chrome.storage.local.set(visitedSite);
+            setBadge();
+
+            notification("Found an exposed .env", to_check);
         }
     });
 }
@@ -405,6 +433,7 @@ function set_options(options) {
     check_git = options.functions.git;
     check_svn = options.functions.svn;
     check_hg = options.functions.hg;
+    check_env = options.functions.env;
 }
 
 
@@ -458,6 +487,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
         sendResponse({status: true});
     } else if (request.type === "hg") {
         check_hg = request.value;
+        sendResponse({status: true});
+    } else if (request.type === "env") {
+        check_env = request.value;
         sendResponse({status: true});
     } else if (request.type === "notification_new_git") {
         notification_new_git = request.value;
@@ -543,6 +575,10 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
             }
             if (check_hg) {
                 checkHg(url, result);
+                save = true;
+            }
+            if (check_env) {
+                checkEnv(url, result);
                 save = true;
             }
             // save only if a check is done
