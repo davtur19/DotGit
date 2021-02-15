@@ -554,39 +554,41 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
     set_options(result.options);
 
     chrome.webRequest.onCompleted.addListener(function (details) {
-        let url = new URL(details["url"])["origin"];
-        // replace ws and wss with http and https
-        url = url.replace(WS_SEARCH, WS_REPLACE);
+        chrome.storage.local.get(["checked"], function (result) {
+            let url = new URL(details["url"])["origin"];
+            // replace ws and wss with http and https
+            url = url.replace(WS_SEARCH, WS_REPLACE);
 
-        if (url.startsWith("chrome-extension")) {
-            return false;
-        }
+            if (url.startsWith("chrome-extension")) {
+                return false;
+            }
 
-        // save visited sites
-        let save = false;
-        if (result.checked.includes(url) === false) {
-            if (check_git) {
-                checkGit(url, result);
-                save = true;
+            // save visited sites
+            let save = false;
+            if (result.checked.includes(url) === false) {
+                if (check_git) {
+                    checkGit(url, result);
+                    save = true;
+                }
+                if (check_svn) {
+                    checkSvn(url, result);
+                    save = true;
+                }
+                if (check_hg) {
+                    checkHg(url, result);
+                    save = true;
+                }
+                if (check_env) {
+                    checkEnv(url, result);
+                    save = true;
+                }
+                // save only if a check is done
+                if (save) {
+                    result.checked.push(url);
+                    chrome.storage.local.set(result);
+                }
             }
-            if (check_svn) {
-                checkSvn(url, result);
-                save = true;
-            }
-            if (check_hg) {
-                checkHg(url, result);
-                save = true;
-            }
-            if (check_env) {
-                checkEnv(url, result);
-                save = true;
-            }
-            // save only if a check is done
-            if (save) {
-                result.checked.push(url);
-                chrome.storage.local.set(result);
-            }
-        }
+        });
     }, {
         urls: ["<all_urls>"]
     });
