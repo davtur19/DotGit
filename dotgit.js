@@ -554,7 +554,7 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
     set_options(result.options);
 
     chrome.webRequest.onCompleted.addListener(function (details) {
-        chrome.storage.local.get(["checked"], function (result) {
+        chrome.storage.local.get(["checked", "withExposedGit"], function (result) {
             let url = new URL(details["url"])["origin"];
             // replace ws and wss with http and https
             url = url.replace(WS_SEARCH, WS_REPLACE);
@@ -586,6 +586,7 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
                 if (save) {
                     result.checked.push(url);
                     chrome.storage.local.set(result);
+                    console.log(result);
                 }
             }
         });
