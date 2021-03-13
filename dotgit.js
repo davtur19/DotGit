@@ -137,6 +137,7 @@ function setBadge() {
 
 function checkGit(url, visitedSite) {
     let to_check = url + GIT_HEAD_PATH;
+    const search = new RegExp(GIT_OBJECTS_SEARCH, "y");
 
     fetch(to_check, {
         redirect: "manual"
@@ -146,7 +147,7 @@ function checkGit(url, visitedSite) {
         }
         return false;
     }).then(function (text) {
-        if (text !== false && text.startsWith(GIT_HEAD_HEADER) === true) {
+        if (text !== false && (text.startsWith(GIT_HEAD_HEADER) === true || search.test(text) === true)) {
             // .git found
             visitedSite.withExposedGit.push({type: "git", url: url});
             chrome.storage.local.set(visitedSite);
@@ -586,7 +587,6 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
                 if (save) {
                     result.checked.push(url);
                     chrome.storage.local.set(result);
-                    console.log(result);
                 }
             }
         });
