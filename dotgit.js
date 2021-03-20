@@ -40,7 +40,7 @@ const HG_MANIFEST_HEADERS = [
 ];
 
 const ENV_PATH = "/.env";
-const ENV_SEARCH = "^[A-Z_]+=|^[#\\n\\r ][\\s\\S]*[A-Z_]+=";
+const ENV_SEARCH = "^[A-Z_]+=|^[#\\n\\r ][\\s\\S]*^[A-Z_]+=";
 
 const GIT_TREE_HEADER = "tree ";
 const GIT_OBJECTS_PATH = "objects/";
