@@ -22,6 +22,7 @@ function set_gui(options) {
     document.getElementById("off1").checked = !options.notification.new_git;
     document.getElementById("on2").checked = options.notification.download;
     document.getElementById("off2").checked = !options.notification.download;
+    document.getElementById("blacklist").value = options.blacklist.join(", ");
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -89,6 +90,16 @@ document.addEventListener("DOMContentLoaded", function () {
                 chrome.runtime.sendMessage({
                     type: e.target.id,
                     value: e.target.value
+                }, function (response) {
+                });
+            } else if (e.target.id === "blacklist") {
+                result.options.blacklist = e.target.value.replace(/\s/g, "").split(",").filter(function (el) {
+                    return el !== "";
+                });
+                chrome.storage.local.set(result);
+                chrome.runtime.sendMessage({
+                    type: e.target.id,
+                    value: result.options.blacklist
                 }, function (response) {
                 });
             }

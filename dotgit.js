@@ -16,7 +16,8 @@ const DEFAULT_OPTIONS = {
         "max_wait": 10000,
         "max_connections": 20,
         "failed_in_a_row": 250
-    }
+    },
+    "blacklist": ['localhost']
 };
 
 const WS_SEARCH = /(ws)(s)?:\/\//;
@@ -85,6 +86,9 @@ let check_svn;
 let check_hg;
 let check_env;
 let failed_in_a_row;
+let queue = new Queue();
+let queue_running = false;
+let blacklist = [];
 
 
 function notification(title, message) {
@@ -112,13 +116,13 @@ function sendDownloadStatus(url, downloadStatus) {
         type: "downloadStatus",
         url: url,
         downloadStatus: downloadStatus
-    }
+    };
 
     chrome.runtime.sendMessage(message, function () {
         // suppress error for sendMessage
         // noinspection BadExpressionStatementJS
         chrome.runtime.lastError;
-    })
+    });
 }
 
 // WONTFIX it may happen that the badge is set at the same time by several checks, in this way it could be increased only once
@@ -135,62 +139,54 @@ function setBadge() {
     }
 }
 
-function checkGit(url, visitedSite) {
+async function checkGit(url) {
     let to_check = url + GIT_HEAD_PATH;
     const search = new RegExp(GIT_OBJECTS_SEARCH, "y");
 
-    fetch(to_check, {
+    let response = await fetch(to_check, {
         redirect: "manual"
-    }).then(function (response) {
-        if (response.status === 200) {
-            return response.text();
-        }
-        return false;
-    }).then(function (text) {
+    });
+
+    if (response.status === 200) {
+        let text = await response.text();
         if (text !== false && (text.startsWith(GIT_HEAD_HEADER) === true || search.test(text) === true)) {
             // .git found
-            visitedSite.withExposedGit.push({type: "git", url: url});
-            chrome.storage.local.set(visitedSite);
             setBadge();
-
             notification("Found an exposed .git", to_check);
+            return true;
         }
-    });
+    }
+    return false;
 }
 
-function checkSvn(url, visitedSite) {
+async function checkSvn(url) {
     let to_check = url + SVN_DB_PATH;
 
-    fetch(to_check, {
+    let response = await fetch(to_check, {
         redirect: "manual"
-    }).then(function (response) {
-        if (response.status === 200) {
-            return response.text();
-        }
-        return false;
-    }).then(function (text) {
+    });
+
+    if (response.status === 200) {
+        let text = await response.text();
         if (text !== false && text.startsWith(SVN_DB_HEADER) === true) {
             // .svn found
-            visitedSite.withExposedGit.push({type: "svn", url: url});
-            chrome.storage.local.set(visitedSite);
             setBadge();
-
             notification("Found an exposed .svn", to_check);
+            return true;
         }
-    });
+    }
+    return false;
 }
 
-function checkHg(url, visitedSite) {
+async function checkHg(url) {
     let to_check = url + HG_MANIFEST_PATH;
 
-    fetch(to_check, {
+    let response = await fetch(to_check, {
         redirect: "manual"
-    }).then(function (response) {
-        if (response.status === 200) {
-            return response.text();
-        }
-        return false;
-    }).then(function (text) {
+    });
+
+    if (response.status === 200) {
+        let text = await response.text();
         if (text !== false && (
             text.startsWith(HG_MANIFEST_HEADERS[0]) === true ||
             text.startsWith(HG_MANIFEST_HEADERS[1]) === true ||
@@ -198,36 +194,31 @@ function checkHg(url, visitedSite) {
             text.startsWith(HG_MANIFEST_HEADERS[3]) === true)
         ) {
             // .hg found
-            visitedSite.withExposedGit.push({type: "hg", url: url});
-            chrome.storage.local.set(visitedSite);
             setBadge();
-
             notification("Found an exposed .hg", to_check);
+            return true;
         }
-    });
+    }
+    return false;
 }
 
-function checkEnv(url, visitedSite) {
+async function checkEnv(url) {
     let to_check = url + ENV_PATH;
     const search = new RegExp(ENV_SEARCH, "g");
 
-    fetch(to_check, {
+    let response = await fetch(to_check, {
         redirect: "manual"
-    }).then(function (response) {
-        if (response.status === 200) {
-            return response.text();
-        }
-        return false;
-    }).then(function (text) {
+    });
+    if (response.status === 200) {
+        let text = await response.text();
         if (text !== false && search.test(text) === true) {
             // .env found
-            visitedSite.withExposedGit.push({type: "env", url: url});
-            chrome.storage.local.set(visitedSite);
             setBadge();
-
             notification("Found an exposed .env", to_check);
+            return true;
         }
-    });
+    }
+    return false;
 }
 
 
@@ -435,6 +426,7 @@ function set_options(options) {
     check_svn = options.functions.svn;
     check_hg = options.functions.hg;
     check_env = options.functions.env;
+    blacklist = options.blacklist;
 }
 
 
@@ -498,6 +490,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     } else if (request.type === "notification_download") {
         notification_download = request.value;
         sendResponse({status: true});
+    } else if (request.type === "blacklist") {
+        blacklist = request.value;
+        sendResponse({status: true});
     } else if (request.type === "max_connections") {
         max_connections = request.value;
         sendResponse({status: true});
@@ -547,55 +542,142 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
     // upgrade 4.0 => 4.1
     if (typeof result.options.download.failed_in_a_row === "undefined") {
         result.options.download.failed_in_a_row = DEFAULT_OPTIONS.download.failed_in_a_row;
-        chrome.storage.local.set({withExposedGit: result.withExposedGit});
+        chrome.storage.local.set({options: result.options});
+    }
+    // upgrade 4.2.5 => 4.3
+    if (typeof result.options.blacklist === "undefined") {
+        result.options.blacklist = DEFAULT_OPTIONS.blacklist;
+        chrome.storage.local.set({options: result.options});
     }
 
     chrome.storage.local.set({options: checkOptions(DEFAULT_OPTIONS, result.options)});
 
     set_options(result.options);
 
-    chrome.webRequest.onCompleted.addListener(function (details) {
-        chrome.storage.local.get(["checked", "withExposedGit"], function (result) {
-            let url = new URL(details["url"])["origin"];
-            // replace ws and wss with http and https
-            url = url.replace(WS_SEARCH, WS_REPLACE);
-
-            if (url.startsWith("chrome-extension")) {
-                return false;
-            }
-
-            // save visited sites
-            let save = false;
-            if (result.checked.includes(url) === false) {
-                if (check_git) {
-                    checkGit(url, result);
-                    save = true;
-                }
-                if (check_svn) {
-                    checkSvn(url, result);
-                    save = true;
-                }
-                if (check_hg) {
-                    checkHg(url, result);
-                    save = true;
-                }
-                if (check_env) {
-                    checkEnv(url, result);
-                    save = true;
-                }
-                // save only if a check is done
-                if (save) {
-                    result.checked.push(url);
-                    chrome.storage.local.set(result);
-                }
-            }
-        });
-    }, {
-        urls: ["<all_urls>"]
-    });
+    chrome.webRequest.onCompleted.addListener(details => processListener(details), {urls: ["<all_urls>"]});
 });
 
 // Reset download status at each start
 chrome.storage.local.set({
     downloading: []
 });
+
+
+function processListener(details) {
+    if (queue.isEmpty() === true) {
+        chrome.storage.local.get(["checked", "withExposedGit"], result => processSearch(result, details));
+    } else {
+        setTimeout(function () {
+            processListener(details)
+        }, 100);
+    }
+}
+
+
+async function processSearch(storage, details) {
+    let url = new URL(details["url"])["origin"];
+    let hostname = new URL(details["url"])["hostname"];
+    // replace ws and wss with http and https
+    url = url.replace(WS_SEARCH, WS_REPLACE);
+
+    if (url.startsWith("chrome-extension")) {
+        return false;
+    }
+
+    if (storage.checked.includes(url) === false && checkBlacklist(hostname) === false) {
+        queue.enqueue(url);
+        if (queue_running === false) {
+            queue_running = true;
+            await precessQueue(storage);
+            queue_running = false;
+        }
+    }
+}
+
+
+function Queue() {
+    let collection = [];
+    this.print = function () {
+        console.log(collection);
+    };
+    this.enqueue = function (element) {
+        // works for strings not objects
+        if (collection.indexOf(element) === -1) {
+            collection.push(element);
+        }
+    };
+    this.dequeue = function () {
+        return collection.shift();
+    };
+    this.front = function () {
+        return collection[0];
+    };
+    this.size = function () {
+        return collection.length;
+    };
+    this.isEmpty = function () {
+        return (collection.length === 0);
+    };
+}
+
+
+async function precessQueue(visitedSite) {
+    if (queue.isEmpty() !== true) {
+        let url = queue.front();
+
+        if (check_git) {
+            if (await checkGit(url) !== false) {
+                visitedSite.withExposedGit.push({type: "git", url: url});
+                chrome.storage.local.set(visitedSite);
+            }
+        }
+        if (check_svn) {
+            if (await checkSvn(url) !== false) {
+                visitedSite.withExposedGit.push({type: "svn", url: url});
+                chrome.storage.local.set(visitedSite);
+            }
+        }
+        if (check_hg) {
+            if (await checkHg(url) !== false) {
+                visitedSite.withExposedGit.push({type: "hg", url: url});
+                chrome.storage.local.set(visitedSite);
+            }
+        }
+        if (check_env) {
+            if (await checkEnv(url) !== false) {
+                visitedSite.withExposedGit.push({type: "env", url: url});
+                chrome.storage.local.set(visitedSite);
+            }
+        }
+        visitedSite.checked.push(url);
+        chrome.storage.local.set(visitedSite);
+        queue.dequeue();
+
+    } else {
+        setTimeout(function () {
+            precessQueue(visitedSite)
+        }, 100);
+    }
+}
+
+
+function checkBlacklist(hostname) {
+    blacklist.forEach(function (b) {
+            let splits = b.split('*');
+            if (splits[1] !== "undefined") {
+                let parts = [];
+                splits.forEach(el => parts.push(escapeRegExp(el)));
+                let re = new RegExp(parts.join('.*'));
+                if (re.test(hostname) === true) {
+                    return true
+                }
+            }
+        }
+    );
+    return false;
+}
+
+
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+}
