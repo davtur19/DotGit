@@ -86,7 +86,8 @@ let check_svn;
 let check_hg;
 let check_env;
 let failed_in_a_row;
-let queue = new Queue();
+let queue_listener = new Queue();
+let queue_req = new Queue();
 let queue_running = false;
 let blacklist = [];
 
@@ -125,7 +126,7 @@ function sendDownloadStatus(url, downloadStatus) {
     });
 }
 
-// WONTFIX it may happen that the badge is set at the same time by several checks, in this way it could be increased only once
+// it may happen that the badge is set at the same time by several checks, in this way it could be increased only once
 function setBadge() {
     // Not supported on Firefox for Android
     if (chrome.browserAction.setBadgeText) {
@@ -139,66 +140,104 @@ function setBadge() {
     }
 }
 
+
+async function fetchWithTimeout(resource, options) {
+    const {timeout = 10000} = options;
+
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+
+    const response = await fetch(resource, {
+        ...options,
+        signal: controller.signal
+    });
+    clearTimeout(id);
+
+    return response;
+}
+
+
 async function checkGit(url) {
     let to_check = url + GIT_HEAD_PATH;
     const search = new RegExp(GIT_OBJECTS_SEARCH, "y");
 
-    let response = await fetch(to_check, {
-        redirect: "manual"
-    });
+    try {
+        const response = await fetchWithTimeout(to_check, {
+            redirect: "manual",
+            timeout: 10000
+        });
 
-    if (response.status === 200) {
-        let text = await response.text();
-        if (text !== false && (text.startsWith(GIT_HEAD_HEADER) === true || search.test(text) === true)) {
-            // .git found
-            setBadge();
-            notification("Found an exposed .git", to_check);
-            return true;
+        if (response.status === 200) {
+            let text = await response.text();
+            if (text !== false && (text.startsWith(GIT_HEAD_HEADER) === true || search.test(text) === true)) {
+                // .git found
+                setBadge();
+                notification("Found an exposed .git", to_check);
+                return true;
+            }
         }
+    } catch (error) {
+        // Timeouts if the request takes longer than X seconds
+        //console.log(error.name);
     }
+
     return false;
 }
 
 async function checkSvn(url) {
     let to_check = url + SVN_DB_PATH;
 
-    let response = await fetch(to_check, {
-        redirect: "manual"
-    });
+    try {
+        const response = await fetchWithTimeout(to_check, {
+            redirect: "manual",
+            timeout: 10000
+        });
 
-    if (response.status === 200) {
-        let text = await response.text();
-        if (text !== false && text.startsWith(SVN_DB_HEADER) === true) {
-            // .svn found
-            setBadge();
-            notification("Found an exposed .svn", to_check);
-            return true;
+        if (response.status === 200) {
+            let text = await response.text();
+            if (text !== false && text.startsWith(SVN_DB_HEADER) === true) {
+                // .svn found
+                setBadge();
+                notification("Found an exposed .svn", to_check);
+                return true;
+            }
         }
+    } catch (error) {
+        // Timeouts if the request takes longer than X seconds
+        //console.log(error.name);
     }
+
     return false;
 }
 
 async function checkHg(url) {
     let to_check = url + HG_MANIFEST_PATH;
 
-    let response = await fetch(to_check, {
-        redirect: "manual"
-    });
+    try {
+        const response = await fetchWithTimeout(to_check, {
+            redirect: "manual",
+            timeout: 10000
+        });
 
-    if (response.status === 200) {
-        let text = await response.text();
-        if (text !== false && (
-            text.startsWith(HG_MANIFEST_HEADERS[0]) === true ||
-            text.startsWith(HG_MANIFEST_HEADERS[1]) === true ||
-            text.startsWith(HG_MANIFEST_HEADERS[2]) === true ||
-            text.startsWith(HG_MANIFEST_HEADERS[3]) === true)
-        ) {
-            // .hg found
-            setBadge();
-            notification("Found an exposed .hg", to_check);
-            return true;
+        if (response.status === 200) {
+            let text = await response.text();
+            if (text !== false && (
+                text.startsWith(HG_MANIFEST_HEADERS[0]) === true ||
+                text.startsWith(HG_MANIFEST_HEADERS[1]) === true ||
+                text.startsWith(HG_MANIFEST_HEADERS[2]) === true ||
+                text.startsWith(HG_MANIFEST_HEADERS[3]) === true)
+            ) {
+                // .hg found
+                setBadge();
+                notification("Found an exposed .hg", to_check);
+                return true;
+            }
         }
+    } catch (error) {
+        // Timeouts if the request takes longer than X seconds
+        //console.log(error.name);
     }
+
     return false;
 }
 
@@ -206,18 +245,26 @@ async function checkEnv(url) {
     let to_check = url + ENV_PATH;
     const search = new RegExp(ENV_SEARCH, "g");
 
-    let response = await fetch(to_check, {
-        redirect: "manual"
-    });
-    if (response.status === 200) {
-        let text = await response.text();
-        if (text !== false && search.test(text) === true) {
-            // .env found
-            setBadge();
-            notification("Found an exposed .env", to_check);
-            return true;
+    try {
+        const response = await fetchWithTimeout(to_check, {
+            redirect: "manual",
+            timeout: 10000
+        });
+
+        if (response.status === 200) {
+            let text = await response.text();
+            if (text !== false && search.test(text) === true) {
+                // .env found
+                setBadge();
+                notification("Found an exposed .env", to_check);
+                return true;
+            }
         }
+    } catch (error) {
+        // Timeouts if the request takes longer than X seconds
+        //console.log(error.name);
     }
+
     return false;
 }
 
@@ -564,32 +611,42 @@ chrome.storage.local.set({
 
 
 function processListener(details) {
-    if (queue.isEmpty() === true) {
-        chrome.storage.local.get(["checked", "withExposedGit"], result => processSearch(result, details));
+    let origin = new URL(details["url"])["origin"];
+    if (queue_req.isEmpty() === true) {
+        chrome.storage.local.get(["checked", "withExposedGit"], result => processSearch(result, origin));
     } else {
-        setTimeout(function () {
-            processListener(details)
-        }, 100);
+        queue_listener.enqueue(origin);
     }
 }
 
 
-async function processSearch(storage, details) {
-    let url = new URL(details["url"])["origin"];
-    let hostname = new URL(details["url"])["hostname"];
+function checkUrl(storage, origin) {
+    let hostname = new URL(origin)["hostname"];
     // replace ws and wss with http and https
-    url = url.replace(WS_SEARCH, WS_REPLACE);
+    origin = origin.replace(WS_SEARCH, WS_REPLACE);
 
-    if (url.startsWith("chrome-extension")) {
+    if (origin.startsWith("chrome-extension")) {
         return false;
     }
+    return (storage.checked.includes(origin) === false && checkBlacklist(hostname) === false);
+}
 
-    if (storage.checked.includes(url) === false && checkBlacklist(hostname) === false) {
-        queue.enqueue(url);
+
+async function processSearch(storage, origin) {
+    if (checkUrl(storage, origin)) {
         if (queue_running === false) {
             queue_running = true;
+            queue_req.enqueue(origin);
+            while (queue_listener.isEmpty() === false) {
+                let origin2 = queue_listener.dequeue();
+                if (checkUrl(storage, origin2)) {
+                    queue_req.enqueue(origin2);
+                }
+            }
             await precessQueue(storage);
             queue_running = false;
+        } else {
+            queue_listener.enqueue(origin);
         }
     }
 }
@@ -622,8 +679,8 @@ function Queue() {
 
 
 async function precessQueue(visitedSite) {
-    if (queue.isEmpty() !== true) {
-        let url = queue.front();
+    while (queue_req.isEmpty() !== true) {
+        let url = queue_req.front();
 
         if (check_git) {
             if (await checkGit(url) !== false) {
@@ -651,12 +708,7 @@ async function precessQueue(visitedSite) {
         }
         visitedSite.checked.push(url);
         chrome.storage.local.set(visitedSite);
-        queue.dequeue();
-
-    } else {
-        setTimeout(function () {
-            precessQueue(visitedSite)
-        }, 100);
+        queue_req.dequeue();
     }
 }
 
