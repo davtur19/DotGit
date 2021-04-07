@@ -11,6 +11,7 @@ const DEFAULT_OPTIONS = {
         "new_git": true,
         "download": true
     },
+    "check_opensource": true,
     "download": {
         "wait": 100,
         "max_wait": 10000,
@@ -25,6 +26,7 @@ const WS_REPLACE = "http$2://";
 
 const GIT_PATH = "/.git/";
 const GIT_HEAD_PATH = GIT_PATH + "HEAD";
+const GIT_CONFIG_PATH = GIT_PATH + "config";
 const GIT_HEAD_HEADER = "ref: refs/heads/";
 
 const SVN_PATH = "/.svn/";
@@ -46,6 +48,7 @@ const ENV_SEARCH = "^[A-Z_]+=|^[#\\n\\r ][\\s\\S]*^[A-Z_]+=";
 const GIT_TREE_HEADER = "tree ";
 const GIT_OBJECTS_PATH = "objects/";
 const GIT_OBJECTS_SEARCH = "[a-f0-9]{40}";
+const GIT_CONFIG_SEARCH = "url = (.*(github\\.com|gitlab\\.com).*)";
 const GIT_PACK_PATH = "objects/pack/";
 const GIT_PACK_SEARCH = "pack\-[a-f0-9]{40}";
 const GIT_PACK_EXT = ".pack";
@@ -81,6 +84,7 @@ let max_wait;
 let max_connections;
 let notification_new_git;
 let notification_download;
+let check_opensource;
 let check_git;
 let check_svn;
 let check_hg;
@@ -158,7 +162,7 @@ async function fetchWithTimeout(resource, options) {
 
 
 async function checkGit(url) {
-    let to_check = url + GIT_HEAD_PATH;
+    const to_check = url + GIT_HEAD_PATH;
     const search = new RegExp(GIT_OBJECTS_SEARCH, "y");
 
     try {
@@ -185,7 +189,7 @@ async function checkGit(url) {
 }
 
 async function checkSvn(url) {
-    let to_check = url + SVN_DB_PATH;
+    const to_check = url + SVN_DB_PATH;
 
     try {
         const response = await fetchWithTimeout(to_check, {
@@ -211,7 +215,7 @@ async function checkSvn(url) {
 }
 
 async function checkHg(url) {
-    let to_check = url + HG_MANIFEST_PATH;
+    const to_check = url + HG_MANIFEST_PATH;
 
     try {
         const response = await fetchWithTimeout(to_check, {
@@ -242,7 +246,7 @@ async function checkHg(url) {
 }
 
 async function checkEnv(url) {
-    let to_check = url + ENV_PATH;
+    const to_check = url + ENV_PATH;
     const search = new RegExp(ENV_SEARCH, "g");
 
     try {
@@ -469,6 +473,7 @@ function set_options(options) {
     failed_in_a_row = options.download.failed_in_a_row;
     notification_new_git = options.notification.new_git;
     notification_download = options.notification.download;
+    check_opensource = options.check_opensource;
     check_git = options.functions.git;
     check_svn = options.functions.svn;
     check_hg = options.functions.hg;
@@ -537,6 +542,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     } else if (request.type === "notification_download") {
         notification_download = request.value;
         sendResponse({status: true});
+    } else if (request.type === "check_opensource") {
+        check_opensource = request.value;
+        sendResponse({status: true});
     } else if (request.type === "blacklist") {
         blacklist = request.value;
         sendResponse({status: true});
@@ -585,16 +593,6 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
         });
         result.withExposedGit = urls;
         chrome.storage.local.set({withExposedGit: result.withExposedGit});
-    }
-    // upgrade 4.0 => 4.1
-    if (typeof result.options.download.failed_in_a_row === "undefined") {
-        result.options.download.failed_in_a_row = DEFAULT_OPTIONS.download.failed_in_a_row;
-        chrome.storage.local.set({options: result.options});
-    }
-    // upgrade 4.2.5 => 4.3
-    if (typeof result.options.blacklist === "undefined") {
-        result.options.blacklist = DEFAULT_OPTIONS.blacklist;
-        chrome.storage.local.set({options: result.options});
     }
 
     chrome.storage.local.set({options: checkOptions(DEFAULT_OPTIONS, result.options)});
@@ -684,7 +682,11 @@ async function precessQueue(visitedSite) {
 
         if (check_git) {
             if (await checkGit(url) !== false) {
-                visitedSite.withExposedGit.push({type: "git", url: url});
+                let open = false;
+                if (check_opensource) {
+                    open = await isOpenSource(url);
+                }
+                visitedSite.withExposedGit.push({type: "git", url: url, open: open});
                 chrome.storage.local.set(visitedSite);
             }
         }
@@ -732,4 +734,89 @@ function checkBlacklist(hostname) {
 
 function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+}
+
+
+async function isOpenSource(url) {
+    let configUrl;
+    let str = "";
+
+    configUrl = await checkGitConfig(url);
+
+    if (configUrl !== false) {
+        str = configUrl.replace("github.com:", "github.com/");
+        str = str.replace("gitlab.com:", "gitlab.com/");
+        if (str.startsWith("ssh://")) {
+            str = str.substring(6);
+        }
+        if (str.startsWith("git@")) {
+            str = str.substring(4);
+        }
+        if (str.endsWith(".git")) {
+            str = str.substring(0, str.length - 4);
+        }
+        if (str.startsWith("http") === false) {
+            str = "https://" + str;
+        }
+
+        console.log(str);
+
+        if (isValidUrl(str)) {
+            return await checkOpenSource(str);
+        }
+    }
+
+    return false;
+}
+
+function isValidUrl(string) {
+    try {
+        new URL(string);
+    } catch (_) {
+        return false;
+    }
+    return true;
+}
+
+async function checkGitConfig(url) {
+    const to_check = url + GIT_CONFIG_PATH;
+    const search = new RegExp(GIT_CONFIG_SEARCH);
+    let result = [];
+
+    try {
+        const response = await fetchWithTimeout(to_check, {
+            redirect: "manual",
+            timeout: 10000
+        });
+
+        if (response.status === 200) {
+            let text = await response.text();
+            if (text !== false && ((result = search.exec(text)) !== null)) {
+                return result[1];
+            }
+        }
+    } catch (error) {
+        // Timeouts if the request takes longer than X seconds
+        //console.log(error.name);
+    }
+
+    return false;
+}
+
+async function checkOpenSource(url) {
+    try {
+        const response = await fetchWithTimeout(url, {
+            redirect: "manual",
+            timeout: 10000
+        });
+
+        if (response.status === 200) {
+            return true;
+        }
+    } catch (error) {
+        // Timeouts if the request takes longer than X seconds
+        //console.log(error.name);
+    }
+
+    return false;
 }

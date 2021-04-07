@@ -22,6 +22,8 @@ function set_gui(options) {
     document.getElementById("off1").checked = !options.notification.new_git;
     document.getElementById("on2").checked = options.notification.download;
     document.getElementById("off2").checked = !options.notification.download;
+    document.getElementById("on3").checked = options.check_opensource;
+    document.getElementById("off3").checked = !options.check_opensource;
     document.getElementById("blacklist").value = options.blacklist.join(", ");
 }
 
@@ -82,6 +84,14 @@ document.addEventListener("DOMContentLoaded", function () {
                 chrome.runtime.sendMessage({
                     type: e.target.name,
                     value: result.options.notification.download
+                }, function (response) {
+                });
+            } else if (e.target.name === "check_opensource") {
+                result.options.check_opensource = (e.target.value === "on");
+                chrome.storage.local.set(result);
+                chrome.runtime.sendMessage({
+                    type: e.target.name,
+                    value: result.options.check_opensource
                 }, function (response) {
                 });
             } else if (e.target.validity.valid === true && (e.target.id === "max_connections" || e.target.id === "wait" || e.target.id === "max_wait" || e.target.id === "failed_in_a_row")) {

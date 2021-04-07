@@ -55,8 +55,11 @@ function addElements(element, array, callback, downloading, max_sites) {
         if (callback(array[i].type) === "git") {
             const spanDownloadStatus = document.createElement("span");
             spanDownloadStatus.setAttribute("class", "secondary-content truncate");
+            const spanOpenSourceStatus = document.createElement("span");
+            spanOpenSourceStatus.setAttribute("class", "secondary-content");
 
             const btnDownload = document.createElement("i");
+            btnDownload.setAttribute("id", "db:" + callback(array[i].url));
             if (downloading.includes(callback(array[i]))) {
                 btnDownload.setAttribute("class", "material-icons btn-small blue disabled");
             } else {
@@ -70,11 +73,20 @@ function addElements(element, array, callback, downloading, max_sites) {
             downloadStatus.setAttribute("title", "success/failed/total");
             downloadStatus.innerText = "";
 
+            const openSourceStatus = document.createElement("i");
+            openSourceStatus.setAttribute("class", "material-icons public");
+            openSourceStatus.setAttribute("title", "The Website is OpenSource");
+            openSourceStatus.innerText = "public";
+
             link.setAttribute("href", callback(array[i].url) + "/.git/config");
             spanIcon.appendChild(btnDownload);
             spanDownloadStatus.appendChild(downloadStatus);
+            spanOpenSourceStatus.appendChild(openSourceStatus);
             listItem.appendChild(spanIcon);
             listItem.appendChild(spanDownloadStatus);
+            if (callback(array[i].open) === "true") {
+                listItem.appendChild(spanOpenSourceStatus);
+            }
         }
         if (callback(array[i].type) === "svn") {
             link.setAttribute("href", callback(array[i].url) + "/.svn/");
@@ -105,8 +117,7 @@ document.addEventListener("click", (event) => {
         });
         chrome.runtime.reload();
     } else if (button.classList.contains("download")) {
-        // noinspection JSUnresolvedVariable
-        const url = button.parentElement.nextElementSibling.nextElementSibling.innerText;
+        const url = button.id.substring(3);
 
         button.setAttribute("class", "material-icons btn-small blue disabled");
         chrome.storage.local.get(["downloading"], function (downloading) {

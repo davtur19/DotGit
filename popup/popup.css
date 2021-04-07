@@ -26,6 +26,10 @@ ul.collection {
     transform: translateY(-2px);
 }
 
+.public {
+    transform: translateX(-4px);
+}
+
 .download-status {
     padding: 0 10px;
     height: auto;
