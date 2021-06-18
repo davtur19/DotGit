@@ -27,7 +27,12 @@ ul.collection {
 }
 
 .public {
-    transform: translateX(-4px);
+    transform: translateX(-4px) translateY(-1px);
+    cursor: default;
+}
+
+.delete {
+    transform: translateX(4px) translateY(-2px);
 }
 
 .download-status {

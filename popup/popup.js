@@ -52,6 +52,17 @@ function addElements(element, array, callback, downloading, max_sites) {
 
         const link = document.createElement("a");
 
+        // delete from list button
+        const spanDeleteWebsite = document.createElement("span");
+        spanDeleteWebsite.setAttribute("class", "secondary-content");
+        const deleteWebsite = document.createElement("i");
+        deleteWebsite.setAttribute("id", "del:" + array[i].type + ":" + callback(array[i].url));
+        deleteWebsite.setAttribute("class", "material-icons btn-small red delete");
+        deleteWebsite.setAttribute("title", "Delete website from the list");
+        deleteWebsite.innerText = "delete";
+        spanDeleteWebsite.appendChild(deleteWebsite);
+        listItem.appendChild(spanDeleteWebsite);
+
         if (callback(array[i].type) === "git") {
             const spanDownloadStatus = document.createElement("span");
             spanDownloadStatus.setAttribute("class", "secondary-content truncate");
@@ -65,6 +76,7 @@ function addElements(element, array, callback, downloading, max_sites) {
             } else {
                 btnDownload.setAttribute("class", "material-icons btn-small blue download");
             }
+            btnDownload.setAttribute("title", "Download all files from the .git folder");
             btnDownload.innerText = "file_download";
 
             const downloadStatus = document.createElement("div");
@@ -78,7 +90,7 @@ function addElements(element, array, callback, downloading, max_sites) {
             openSourceStatus.setAttribute("title", "The Website is OpenSource");
             openSourceStatus.innerText = "public";
 
-            link.setAttribute("href", callback(array[i].url) + "/.git/config");
+            link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.git/config");
             spanIcon.appendChild(btnDownload);
             spanDownloadStatus.appendChild(downloadStatus);
             spanOpenSourceStatus.appendChild(openSourceStatus);
@@ -89,13 +101,13 @@ function addElements(element, array, callback, downloading, max_sites) {
             }
         }
         if (callback(array[i].type) === "svn") {
-            link.setAttribute("href", callback(array[i].url) + "/.svn/");
+            link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.svn/");
         }
         if (callback(array[i].type) === "hg") {
-            link.setAttribute("href", callback(array[i].url) + "/.hg/");
+            link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.hg/");
         }
         if (callback(array[i].type) === "env") {
-            link.setAttribute("href", callback(array[i].url) + "/.env");
+            link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.env");
         }
         link.innerText = callback(array[i].url);
 
@@ -138,6 +150,35 @@ document.addEventListener("click", (event) => {
             url: url
         }, function () {
             button.setAttribute("class", "material-icons btn-small blue download");
+        });
+    } else if (button.classList.contains("delete")) {
+        const split = button.id.split(":");
+        const type = split[1];
+        const url = split.slice(2).join(":");
+        let indexDelete = null;
+
+        button.setAttribute("class", "material-icons btn-small red disabled");
+        chrome.storage.local.get(["withExposedGit"], function (result) {
+            result.withExposedGit.forEach(function (obj, i) {
+                if (obj.type === type && obj.url === url) {
+                    indexDelete = i;
+                }
+            });
+
+            if (indexDelete !== null) {
+                result.withExposedGit.splice(indexDelete, 1);
+                button.parentNode.parentNode.outerHTML = "";
+                // change title
+                const hostElementFoundTitle = document.getElementById("hostsFoundTitle");
+                const split2 = hostElementFoundTitle.textContent.split(" ");
+                const number = split2[2];
+                const strTitle = split2.slice(3).join(" ");
+                hostElementFoundTitle.textContent = "Total found: " + (number - 1) + " " + strTitle;
+
+                chrome.storage.local.set({
+                    withExposedGit: result.withExposedGit
+                });
+            }
         });
     } else if (button.id === "options") {
         if (chrome.runtime.openOptionsPage) {
