@@ -12,6 +12,7 @@ const DEFAULT_OPTIONS = {
         "download": true
     },
     "check_opensource": true,
+    "check_securitytxt": true,
     "download": {
         "wait": 100,
         "max_wait": 10000,
@@ -57,6 +58,12 @@ const SHA1_SIZE = 20;
 const GIT_BLOB_DELIMITER = String.fromCharCode(0);
 const STATUS_DESCRIPTION = "HTTP Status code for downloaded files: 200 Good, 404 Normal, 403 and 5XX Bad\n";
 
+const SECURITYTXT_PATHS = [
+    "/.well-known/security.txt",
+    "/security.txt",
+];
+SECURITYTXT_SEARCH = "Contact: ";
+
 const GIT_WELL_KNOW_PATHS = [
     "HEAD",
     "ORIG_HEAD",
@@ -85,6 +92,7 @@ let max_connections;
 let notification_new_git;
 let notification_download;
 let check_opensource;
+let check_securitytxt;
 let check_git;
 let check_svn;
 let check_hg;
@@ -109,7 +117,7 @@ function notification(title, message) {
 
     chrome.notifications.create({
         type: "basic",
-        iconUrl: chrome.extension.getURL("icons/dotgit-48.png"),
+        iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
         title: title,
         message: message
     });
@@ -474,6 +482,7 @@ function set_options(options) {
     notification_new_git = options.notification.new_git;
     notification_download = options.notification.download;
     check_opensource = options.check_opensource;
+    check_securitytxt = options.check_securitytxt;
     check_git = options.functions.git;
     check_svn = options.functions.svn;
     check_hg = options.functions.hg;
@@ -544,6 +553,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
         sendResponse({status: true});
     } else if (request.type === "check_opensource") {
         check_opensource = request.value;
+        sendResponse({status: true});
+    } else if (request.type === "check_securitytxt") {
+        check_securitytxt = request.value;
         sendResponse({status: true});
     } else if (request.type === "blacklist") {
         blacklist = request.value;
@@ -679,6 +691,7 @@ function Queue() {
 async function precessQueue(visitedSite) {
     while (queue_req.isEmpty() !== true) {
         let url = queue_req.front();
+        let securitytxt = null;
 
         if (check_git) {
             if (await checkGit(url) !== false) {
@@ -686,25 +699,43 @@ async function precessQueue(visitedSite) {
                 if (check_opensource) {
                     open = await isOpenSource(url);
                 }
-                visitedSite.withExposedGit.push({type: "git", url: url, open: open});
+                if (check_securitytxt) {
+                    securitytxt = await checkSecuritytxt(url);
+                }
+
+                visitedSite.withExposedGit.push({
+                    type: "git",
+                    url: url,
+                    open: open,
+                    securitytxt: securitytxt
+                });
                 chrome.storage.local.set(visitedSite);
             }
         }
         if (check_svn) {
             if (await checkSvn(url) !== false) {
-                visitedSite.withExposedGit.push({type: "svn", url: url});
+                if (check_securitytxt && securitytxt === null) {
+                    securitytxt = await checkSecuritytxt(url);
+                }
+                visitedSite.withExposedGit.push({type: "svn", url: url, securitytxt: securitytxt});
                 chrome.storage.local.set(visitedSite);
             }
         }
         if (check_hg) {
             if (await checkHg(url) !== false) {
-                visitedSite.withExposedGit.push({type: "hg", url: url});
+                if (check_securitytxt && securitytxt === null) {
+                    securitytxt = await checkSecuritytxt(url);
+                }
+                visitedSite.withExposedGit.push({type: "hg", url: url, securitytxt: securitytxt});
                 chrome.storage.local.set(visitedSite);
             }
         }
         if (check_env) {
             if (await checkEnv(url) !== false) {
-                visitedSite.withExposedGit.push({type: "env", url: url});
+                if (check_securitytxt && securitytxt === null) {
+                    securitytxt = await checkSecuritytxt(url);
+                }
+                visitedSite.withExposedGit.push({type: "env", url: url, securitytxt: securitytxt});
                 chrome.storage.local.set(visitedSite);
             }
         }
@@ -758,8 +789,7 @@ async function isOpenSource(url) {
         if (str.startsWith("http") === false) {
             str = "https://" + str;
         }
-
-        console.log(str);
+        //console.log(str);
 
         if (isValidUrl(str)) {
             return await checkOpenSource(str);
@@ -811,12 +841,38 @@ async function checkOpenSource(url) {
         });
 
         if (response.status === 200) {
-            return true;
+            return url;
         }
     } catch (error) {
         // Timeouts if the request takes longer than X seconds
         //console.log(error.name);
     }
 
+    return false;
+}
+
+
+async function checkSecuritytxt(url) {
+    for (const element of SECURITYTXT_PATHS) {
+        const to_check = url + element;
+        const search = new RegExp(SECURITYTXT_SEARCH);
+
+        try {
+            const response = await fetchWithTimeout(to_check, {
+                redirect: "manual",
+                timeout: 10000
+            });
+
+            if (response.status === 200) {
+                let text = await response.text();
+                if (text !== false && ((search.exec(text)) !== null)) {
+                    return to_check;
+                }
+            }
+        } catch (error) {
+            // Timeouts if the request takes longer than X seconds
+            //console.log(error.name);
+        }
+    }
     return false;
 }

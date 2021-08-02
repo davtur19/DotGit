@@ -63,6 +63,16 @@ function addElements(element, array, callback, downloading, max_sites) {
         spanDeleteWebsite.appendChild(deleteWebsite);
         listItem.appendChild(spanDeleteWebsite);
 
+        const spanSecuritytxtStatus = document.createElement("span");
+        spanSecuritytxtStatus.setAttribute("class", "secondary-content");
+        const securitytxtStatus = document.createElement("a");
+        securitytxtStatus.setAttribute("class", "material-icons btn-small security");
+        securitytxtStatus.setAttribute("title", "The Website has security.txt");
+        securitytxtStatus.setAttribute("href", "view-source:" + callback(array[i].securitytxt));
+        securitytxtStatus.innerText = "security";
+        spanSecuritytxtStatus.appendChild(securitytxtStatus);
+
+
         if (callback(array[i].type) === "git") {
             const spanDownloadStatus = document.createElement("span");
             spanDownloadStatus.setAttribute("class", "secondary-content truncate");
@@ -85,9 +95,10 @@ function addElements(element, array, callback, downloading, max_sites) {
             downloadStatus.setAttribute("title", "success/failed/total");
             downloadStatus.innerText = "";
 
-            const openSourceStatus = document.createElement("i");
-            openSourceStatus.setAttribute("class", "material-icons public");
+            const openSourceStatus = document.createElement("a");
+            openSourceStatus.setAttribute("class", "material-icons btn-small public");
             openSourceStatus.setAttribute("title", "The Website is OpenSource");
+            openSourceStatus.setAttribute("href", callback(array[i].open));
             openSourceStatus.innerText = "public";
 
             link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.git/config");
@@ -95,18 +106,34 @@ function addElements(element, array, callback, downloading, max_sites) {
             spanDownloadStatus.appendChild(downloadStatus);
             spanOpenSourceStatus.appendChild(openSourceStatus);
             listItem.appendChild(spanIcon);
-            listItem.appendChild(spanDownloadStatus);
-            if (callback(array[i].open) === "true") {
+            if (callback(array[i].open) !== "false") {
+                // check if it has the old version values (4.5)
+                if (callback(array[i].open) === "true") {
+                    openSourceStatus.setAttribute("href", "about:blank");
+                }
                 listItem.appendChild(spanOpenSourceStatus);
             }
+            if (callback(array[i].securitytxt) !== "false") {
+                listItem.appendChild(spanSecuritytxtStatus);
+            }
+            listItem.appendChild(spanDownloadStatus);
         }
         if (callback(array[i].type) === "svn") {
+            if (callback(array[i].securitytxt) !== "false") {
+                listItem.appendChild(spanSecuritytxtStatus);
+            }
             link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.svn/");
         }
         if (callback(array[i].type) === "hg") {
+            if (callback(array[i].securitytxt) !== "false") {
+                listItem.appendChild(spanSecuritytxtStatus);
+            }
             link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.hg/");
         }
         if (callback(array[i].type) === "env") {
+            if (callback(array[i].securitytxt) !== "false") {
+                listItem.appendChild(spanSecuritytxtStatus);
+            }
             link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.env");
         }
         link.innerText = callback(array[i].url);

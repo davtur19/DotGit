@@ -24,15 +24,7 @@ ul.collection {
     padding: 0 0;
     height: auto;
     transform: translateY(-2px);
-}
-
-.public {
-    transform: translateX(-4px) translateY(-1px);
-    cursor: default;
-}
-
-.delete {
-    transform: translateX(4px) translateY(-2px);
+    margin-left: 4px;
 }
 
 .download-status {
