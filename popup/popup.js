@@ -113,25 +113,25 @@ function addElements(element, array, callback, downloading, max_sites) {
                 }
                 listItem.appendChild(spanOpenSourceStatus);
             }
-            if (callback(array[i].securitytxt) !== "false" && callback(array[i].open) !== "undefined") {
+            if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
                 listItem.appendChild(spanSecuritytxtStatus);
             }
             listItem.appendChild(spanDownloadStatus);
         }
         if (callback(array[i].type) === "svn") {
-            if (callback(array[i].securitytxt) !== "false" && callback(array[i].open) !== "undefined") {
+            if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
                 listItem.appendChild(spanSecuritytxtStatus);
             }
             link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.svn/");
         }
         if (callback(array[i].type) === "hg") {
-            if (callback(array[i].securitytxt) !== "false" && callback(array[i].open) !== "undefined") {
+            if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
                 listItem.appendChild(spanSecuritytxtStatus);
             }
             link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.hg/");
         }
         if (callback(array[i].type) === "env") {
-            if (callback(array[i].securitytxt) !== "false" && callback(array[i].open) !== "undefined") {
+            if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
                 listItem.appendChild(spanSecuritytxtStatus);
             }
             link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.env");
