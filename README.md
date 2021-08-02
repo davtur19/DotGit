@@ -8,6 +8,8 @@ An extension for checking if .git is exposed in visited websites
 ## Features
 - Check if a .git/.svn/.hg folder exists for each site you visit
 - Check if a .env file exists for each site you visit
+- Check if the site is open source (github/gitlab)
+- Check if the site has security.txt
 - You will be notified when a folder is found
 - List of exposed sites found
 - Download the entire .git folder in zip format, even if the files are not listed on the site
