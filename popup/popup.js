@@ -106,7 +106,7 @@ function addElements(element, array, callback, downloading, max_sites) {
             spanDownloadStatus.appendChild(downloadStatus);
             spanOpenSourceStatus.appendChild(openSourceStatus);
             listItem.appendChild(spanIcon);
-            if (callback(array[i].open) !== "false") {
+            if (callback(array[i].open) !== "false" && callback(array[i].open) !== "undefined") {
                 // check if it has the old version values (4.5)
                 if (callback(array[i].open) === "true") {
                     openSourceStatus.setAttribute("href", "about:blank");
