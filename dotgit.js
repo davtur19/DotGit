@@ -19,7 +19,15 @@ const DEFAULT_OPTIONS = {
         "max_connections": 20,
         "failed_in_a_row": 250
     },
-    "blacklist": ['localhost']
+    "blacklist": [
+        'localhost',
+        '1password.com',
+        '1password.ca',
+        '1password.eu',
+        '*.1password.com',
+        '*.1password.ca',
+        '*.1password.eu'
+    ]
 };
 
 const WS_SEARCH = /(ws)(s)?:\/\//;
@@ -747,18 +755,17 @@ async function precessQueue(visitedSite) {
 
 
 function checkBlacklist(hostname) {
-    blacklist.forEach(function (b) {
-            let splits = b.split('*');
-            if (splits[1] !== "undefined") {
-                let parts = [];
-                splits.forEach(el => parts.push(escapeRegExp(el)));
-                let re = new RegExp(parts.join('.*'));
-                if (re.test(hostname) === true) {
-                    return true
-                }
+    for (const b of blacklist) {
+        let splits = b.split('*');
+        if (splits[1] !== "undefined") {
+            let parts = [];
+            splits.forEach(el => parts.push(escapeRegExp(el)));
+            let re = new RegExp(parts.join('.*'));
+            if (re.test(hostname) === true) {
+                return true;
             }
         }
-    );
+    }
     return false;
 }
 
