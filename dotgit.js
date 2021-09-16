@@ -20,13 +20,7 @@ const DEFAULT_OPTIONS = {
         "failed_in_a_row": 250
     },
     "blacklist": [
-        'localhost',
-        '1password.com',
-        '1password.ca',
-        '1password.eu',
-        '*.1password.com',
-        '*.1password.ca',
-        '*.1password.eu'
+        'localhost'
     ]
 };
 
