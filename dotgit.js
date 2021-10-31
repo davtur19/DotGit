@@ -173,7 +173,6 @@ async function fetchWithTimeout(resource, options) {
     return response;
 }
 
-
 async function checkGit(url) {
     const to_check = (url + GIT_HEAD_PATH).replace(/\/\//g ,'/');
     const search = new RegExp(GIT_OBJECTS_SEARCH, "y");
@@ -620,13 +619,13 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
 
     set_options(result.options);
 
-    chrome.webRequest.onCompleted.addListener((details) => {
+    chrome.webRequest.onCompleted.addListener(async (details) => {
         chrome.storage.local.get(["checked", "withExposedGit"], storage => {
             // Drop requests done by the extension itself, prevent endless loop
             if (details.initiator === EXTENSION_URL) return;
 
             let url = new URL(details.url);
-            let candidates = [url.origin + url.pathname];
+            let candidates = [url.origin + url.pathname.replace(/\/[^/]+$/, '/')];
 
             if (check_root) {
                 candidates.unshift(url.origin + '/');

@@ -32,3 +32,41 @@ ul.collection {
     height: auto;
     color: black;
 }
+
+#storage {
+    position: relative;
+    height: 24px;
+    width: 100%;
+    background-color: #5a5a5a;
+}
+
+#storage .usage-bar {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background-color: rgb(29, 192, 29);
+    min-width: 3px;
+}
+
+#storage .usage {
+    display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    color: white;
+    font-size: 12px;
+    text-align: center;
+    line-height: 25px;
+}
+
+#storage .usage-bar.medium {
+    background-color: rgb(233, 152, 32);
+}
+
+#storage .usage-bar.severe {
+    background-color: rgb(218, 59, 31);
+}
