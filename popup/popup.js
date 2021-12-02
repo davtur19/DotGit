@@ -11,7 +11,7 @@ if (chrome.browserAction.setBadgeText) {
 
 function formatBytes(size) {
     const i = Math.floor(Math.log(size) / Math.log(1024));
-    
+
     return (size / Math.pow(1024, i)).toFixed(2)
         * 1 // Remove eventual zero at the end
         + ['B', 'kB', 'MB', 'GB', 'TB'][i];
@@ -24,7 +24,7 @@ function updateStorageIndicator() {
     const quota = chrome.storage.local.QUOTA_BYTES;
 
     chrome.storage.local.getBytesInUse(null, function (memUsage) {
-        let percent = ((memUsage/quota)*100).toFixed(2);
+        let percent = ((memUsage / quota) * 100).toFixed(2);
         storageUsageBar.style.width = percent + '%';
         storageUsageBar.classList.remove('medium', 'high');
         if (percent > 40) storageUsageBar.classList.add(percent > 70 ? 'high' : 'medium');

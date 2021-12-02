@@ -174,7 +174,7 @@ async function fetchWithTimeout(resource, options) {
 }
 
 async function checkGit(url) {
-    const to_check = (url + GIT_HEAD_PATH).replace(/\/\//g ,'/');
+    const to_check = (url + GIT_HEAD_PATH).replace(/\/\//g, '/');
     const search = new RegExp(GIT_OBJECTS_SEARCH, "y");
 
     try {
@@ -631,9 +631,9 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
             if (check_root) {
                 candidates.unshift(url.origin + '/');
             }
-            
+
             candidates.forEach((candidate) => {
-                if(checkUrl(storage, candidate)) processSearch(storage, candidate);
+                if (checkUrl(storage, candidate)) processSearch(storage, candidate);
             });
         });
     }, {urls: ["<all_urls>"]});
@@ -647,9 +647,9 @@ chrome.storage.local.set({
 
 function checkUrl(storage, origin) {
     if (origin[origin.length - 1] !== '/') return false;
-    
+
     let hostname = new URL(origin)["hostname"];
-    
+
     // replace ws and wss with http and https
     origin = origin.replace(WS_SEARCH, WS_REPLACE);
 
