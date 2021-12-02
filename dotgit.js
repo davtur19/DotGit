@@ -13,6 +13,7 @@ const DEFAULT_OPTIONS = {
     },
     "check_opensource": true,
     "check_securitytxt": true,
+    "check_root": true,
     "download": {
         "wait": 100,
         "max_wait": 10000,
@@ -88,19 +89,21 @@ const GIT_WELL_KNOW_PATHS = [
     "info/exclude"
 ];
 
+const EXTENSION_URL = chrome.extension.getURL('').replace(/\/$/, '');
+
 let wait;
 let max_wait;
 let max_connections;
 let notification_new_git;
 let notification_download;
 let check_opensource;
+let check_root;
 let check_securitytxt;
 let check_git;
 let check_svn;
 let check_hg;
 let check_env;
 let failed_in_a_row;
-let queue_listener = new Queue();
 let queue_req = new Queue();
 let queue_running = false;
 let blacklist = [];
@@ -170,9 +173,8 @@ async function fetchWithTimeout(resource, options) {
     return response;
 }
 
-
 async function checkGit(url) {
-    const to_check = url + GIT_HEAD_PATH;
+    const to_check = (url + GIT_HEAD_PATH).replace(/\/\//g ,'/');
     const search = new RegExp(GIT_OBJECTS_SEARCH, "y");
 
     try {
@@ -485,6 +487,7 @@ function set_options(options) {
     notification_download = options.notification.download;
     check_opensource = options.check_opensource;
     check_securitytxt = options.check_securitytxt;
+    check_root = options.check_root;
     check_git = options.functions.git;
     check_svn = options.functions.svn;
     check_hg = options.functions.hg;
@@ -559,6 +562,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     } else if (request.type === "check_securitytxt") {
         check_securitytxt = request.value;
         sendResponse({status: true});
+    } else if (request.type === "check_root") {
+        check_root = request.value;
+        sendResponse({status: true});
     } else if (request.type === "blacklist") {
         blacklist = request.value;
         sendResponse({status: true});
@@ -613,7 +619,23 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
 
     set_options(result.options);
 
-    chrome.webRequest.onCompleted.addListener(details => processListener(details), {urls: ["<all_urls>"]});
+    chrome.webRequest.onCompleted.addListener(async (details) => {
+        chrome.storage.local.get(["checked", "withExposedGit"], storage => {
+            // Drop requests done by the extension itself, prevent endless loop
+            if (details.initiator === EXTENSION_URL) return;
+
+            let url = new URL(details.url);
+            let candidates = [url.origin + url.pathname.replace(/\/[^/]+$/, '/')];
+
+            if (check_root) {
+                candidates.unshift(url.origin + '/');
+            }
+            
+            candidates.forEach((candidate) => {
+                if(checkUrl(storage, candidate)) processSearch(storage, candidate);
+            });
+        });
+    }, {urls: ["<all_urls>"]});
 });
 
 // Reset download status at each start
@@ -622,44 +644,29 @@ chrome.storage.local.set({
 });
 
 
-function processListener(details) {
-    let origin = new URL(details["url"])["origin"];
-    if (queue_req.isEmpty() === true) {
-        chrome.storage.local.get(["checked", "withExposedGit"], result => processSearch(result, origin));
-    } else {
-        queue_listener.enqueue(origin);
-    }
-}
-
-
 function checkUrl(storage, origin) {
+    if (origin[origin.length - 1] !== '/') return false;
+    
     let hostname = new URL(origin)["hostname"];
+    
     // replace ws and wss with http and https
     origin = origin.replace(WS_SEARCH, WS_REPLACE);
 
     if (origin.startsWith("chrome-extension")) {
         return false;
     }
+
     return (storage.checked.includes(origin) === false && checkBlacklist(hostname) === false);
 }
 
 
 async function processSearch(storage, origin) {
-    if (checkUrl(storage, origin)) {
-        if (queue_running === false) {
-            queue_running = true;
-            queue_req.enqueue(origin);
-            while (queue_listener.isEmpty() === false) {
-                let origin2 = queue_listener.dequeue();
-                if (checkUrl(storage, origin2)) {
-                    queue_req.enqueue(origin2);
-                }
-            }
-            await precessQueue(storage);
-            queue_running = false;
-        } else {
-            queue_listener.enqueue(origin);
-        }
+    queue_req.enqueue(origin);
+
+    if (queue_running === false) {
+        queue_running = true;
+        await precessQueue(storage);
+        queue_running = false;
     }
 }
 

@@ -15,17 +15,45 @@ if (chrome.browserAction.setBadgeText) {
     });
 }
 
+function formatBytes(size) {
+    const i = Math.floor(Math.log(size) / Math.log(1024));
+    
+    return (size / Math.pow(1024, i)).toFixed(2)
+        * 1 // Remove eventual zero at the end
+        + ['B', 'kB', 'MB', 'GB', 'TB'][i];
+};
+
+function updateStorageIndicator() {
+    const storage = document.querySelector('#storage');
+    const storageUsageBar = storage.querySelector('.usage-bar');
+    const storageUsage = storage.querySelector('.usage');
+    const quota = chrome.storage.local.QUOTA_BYTES;
+
+    chrome.storage.local.getBytesInUse(null, function (memUsage) {
+        let percent = ((memUsage/quota)*100).toFixed(2);
+        storageUsageBar.style.width = percent + '%';
+        storageUsageBar.classList.remove('medium', 'high');
+        if (percent > 40) storageUsageBar.classList.add(percent > 70 ? 'high' : 'medium');
+        storageUsage.innerText = '' + formatBytes(memUsage) + '/' + formatBytes(quota) + ' - ' + percent + '%';
+    });
+}
 
 document.addEventListener("DOMContentLoaded", function () {
-    chrome.storage.local.get(["options"], function (options) {
-        let color = options.options.color;
+    chrome.storage.local.get(["options", "withExposedGit"], async function (local) {
+        let color = local.options.color;
         let list = document.getElementsByClassName("custom-color");
         for (let n = 0; n < list.length; ++n) {
             list[n].className += " " + color;
         }
-        let max_sites = options.options.max_sites
+        let max_sites = local.options.max_sites
         let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
-        hostElementFoundTitle.textContent = "Total found: 0 Max shown: " + max_sites;
+        hostElementFoundTitle.textContent = "Total found: " + local.withExposedGit.length + " Max shown: " + max_sites;
+
+        updateStorageIndicator();
+    });
+
+    chrome.storage.local.onChanged.addListener(() => {
+        updateStorageIndicator();
     });
 });
 
