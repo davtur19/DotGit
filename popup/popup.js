@@ -1,3 +1,9 @@
+// add "view-source:" only in firefox, because chrome give this error: Not allowed to load local resource
+let HREF_PREFIX = "";
+if (typeof browser !== "undefined") {
+    HREF_PREFIX = "view-source:";
+}
+
 // Not supported on Firefox for Android
 if (chrome.browserAction.setBadgeText) {
     chrome.browserAction.setBadgeText({
@@ -68,7 +74,7 @@ function addElements(element, array, callback, downloading, max_sites) {
         const securitytxtStatus = document.createElement("a");
         securitytxtStatus.setAttribute("class", "material-icons btn-small security");
         securitytxtStatus.setAttribute("title", "The Website has security.txt");
-        securitytxtStatus.setAttribute("href", "view-source:" + callback(array[i].securitytxt));
+        securitytxtStatus.setAttribute("href", HREF_PREFIX + callback(array[i].securitytxt));
         securitytxtStatus.innerText = "security";
         spanSecuritytxtStatus.appendChild(securitytxtStatus);
 
@@ -101,7 +107,7 @@ function addElements(element, array, callback, downloading, max_sites) {
             openSourceStatus.setAttribute("href", callback(array[i].open));
             openSourceStatus.innerText = "public";
 
-            link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.git/config");
+            link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.git/config");
             spanIcon.appendChild(btnDownload);
             spanDownloadStatus.appendChild(downloadStatus);
             spanOpenSourceStatus.appendChild(openSourceStatus);
@@ -122,19 +128,19 @@ function addElements(element, array, callback, downloading, max_sites) {
             if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
                 listItem.appendChild(spanSecuritytxtStatus);
             }
-            link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.svn/");
+            link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.svn/");
         }
         if (callback(array[i].type) === "hg") {
             if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
                 listItem.appendChild(spanSecuritytxtStatus);
             }
-            link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.hg/");
+            link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.hg/");
         }
         if (callback(array[i].type) === "env") {
             if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
                 listItem.appendChild(spanSecuritytxtStatus);
             }
-            link.setAttribute("href", "view-source:" + callback(array[i].url) + "/.env");
+            link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.env");
         }
         link.innerText = callback(array[i].url);
 
