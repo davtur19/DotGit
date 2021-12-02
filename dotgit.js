@@ -89,7 +89,7 @@ const GIT_WELL_KNOW_PATHS = [
     "info/exclude"
 ];
 
-const EXTENSION_URL = chrome.extension.getURL('').replace(/\/$/, '');
+const EXTENSION_URL = chrome.runtime.getURL('').replace(/\/$/, '');
 
 let wait;
 let max_wait;
