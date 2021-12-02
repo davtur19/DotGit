@@ -89,7 +89,7 @@ const GIT_WELL_KNOW_PATHS = [
     "info/exclude"
 ];
 
-const EXTENSION_URL = chrome.runtime.getURL('').replace(/\/$/, '');
+const EXTENSION_URL = chrome.runtime.getURL('');
 
 let wait;
 let max_wait;
@@ -622,7 +622,8 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
     chrome.webRequest.onCompleted.addListener(async (details) => {
         chrome.storage.local.get(["checked", "withExposedGit"], storage => {
             // Drop requests done by the extension itself, prevent endless loop
-            if (details.initiator === EXTENSION_URL) return;
+            if (details.originUrl + '_generated_background_page.html' === EXTENSION_URL ||
+                details.initiator + '/' === EXTENSION_URL) return;
 
             let url = new URL(details.url);
             let candidates = [url.origin + url.pathname.replace(/\/[^/]+$/, '/')];
