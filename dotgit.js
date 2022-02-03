@@ -634,8 +634,6 @@ function processListener(details) {
 
 function checkUrl(storage, origin) {
     let hostname = new URL(origin)["hostname"];
-    // replace ws and wss with http and https
-    origin = origin.replace(WS_SEARCH, WS_REPLACE);
 
     if (origin.startsWith("chrome-extension")) {
         return false;
@@ -694,6 +692,8 @@ async function precessQueue(visitedSite) {
     while (queue_req.isEmpty() !== true) {
         let url = queue_req.front();
         let securitytxt = null;
+        // replace ws and wss with http and https
+        url = url.replace(WS_SEARCH, WS_REPLACE);
 
         if (check_git) {
             if (await checkGit(url) !== false) {
