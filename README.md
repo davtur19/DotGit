@@ -36,6 +36,6 @@ More info [here](https://github.com/davtur19/DotGit/blob/b0f589dfd78396990b8d17e
 
 ## Screenshot
 
-![ScreenShot](https://user-images.githubusercontent.com/13476215/90319561-98ecb100-df39-11ea-876a-cc3c6d762932.png)
+![ScreenShot](https://user-images.githubusercontent.com/13476215/213874632-6f05c28e-1e90-487e-a0d9-f619b9b69e1a.png)
 
 ## Download: [Firefox](https://addons.mozilla.org/it/firefox/addon/dotgit/) | [Chrome](https://chrome.google.com/webstore/detail/dotgit/pampamgoihgcedonnphgehgondkhikel)
