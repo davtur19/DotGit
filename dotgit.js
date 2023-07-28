@@ -613,7 +613,7 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
 
     set_options(result.options);
 
-    chrome.webRequest.onCompleted.addListener(details => processListener(details), {urls: ["<all_urls>"]});
+    chrome.webRequest.onHeadersReceived.addListener(details => processListener(details), {urls: ["<all_urls>"]});
 });
 
 // Reset download status at each start
