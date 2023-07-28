@@ -18,6 +18,7 @@ An extension for checking if .git is exposed in visited websites
 - View .git/config with one click
 - Options for: colors, notifications and downloads
 
+_Some checks are turned off by default, open the settings to turn them on_
 ## How the download works
 
 There is a queue for downloads, with a **maximum of simultaneous connections**; if this number is exceeded, subsequent
