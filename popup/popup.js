@@ -143,6 +143,12 @@ function addElements(element, array, callback, downloading, max_sites) {
             }
             link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.env");
         }
+        if (callback(array[i].type) === "domtakeover") {
+            if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
+                listItem.appendChild(spanSecuritytxtStatus);
+            }
+            link.setAttribute("href", HREF_PREFIX + callback(array[i].originurl));
+        }
         link.innerText = callback(array[i].url);
 
         spanLink.appendChild(link);
