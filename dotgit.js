@@ -285,6 +285,10 @@ async function checkEnv(url) {
 }
 
 async function checkDomtakeover(request) {
+    if (check_domtakeover === false) {
+        return;
+    }
+
     chrome.storage.local.get(["withExposedGit"], function (storagedomtakeover) {
         if (request.error === 'NS_ERROR_UNKNOWN_HOST') {
             let url = new URL(request.url)["origin"];
@@ -663,7 +667,7 @@ chrome.storage.local.set({
 
 
 function processListener(details) {
-    if(!(check_git || check_svn || check_hg || check_env)) {
+    if (!(check_git || check_svn || check_hg || check_env)) {
         return;
     }
 
@@ -784,11 +788,11 @@ async function precessQueue(visitedSite) {
         }
 
         chrome.storage.local.get(["withExposedGit", "checked"], function (result) {
-           findings.forEach(function (obj) {
-               result.withExposedGit.push(obj);
-           });
-           result.checked.push(url);
-           chrome.storage.local.set(result);
+            findings.forEach(function (obj) {
+                result.withExposedGit.push(obj);
+            });
+            result.checked.push(url);
+            chrome.storage.local.set(result);
         });
         queue_req.dequeue();
     }
