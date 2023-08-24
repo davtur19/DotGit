@@ -10,9 +10,10 @@ if (chrome.browserAction.setBadgeText) {
         text: ""
     });
     // set width for desktop devices
-    document.addEventListener("DOMContentLoaded", function () {
+    // not working anymore on chrome, fixed with css
+    /*document.addEventListener("DOMContentLoaded", function () {
         document.getElementById("hostsFound").style.width = "380px";
-    });
+    });*/
 }
 
 
