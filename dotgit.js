@@ -655,9 +655,7 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
 
     set_options(result.options);
 
-    chrome.webRequest.onHeadersReceived.addListener(async function (details) {
-        await processListener(details)
-    }, {urls: ["<all_urls>"]});
+    chrome.webRequest.onHeadersReceived.addListener(details => processListener(details), {urls: ["<all_urls>"]});
     chrome.webRequest.onErrorOccurred.addListener(details => checkDomtakeover(details, result), {urls: ["<all_urls>"]});
 
 });
@@ -668,56 +666,47 @@ chrome.storage.local.set({
 });
 
 
-async function processListener(details) {
+function processListener(details) {
     if (!(check_git || check_svn || check_hg || check_env)) {
         return;
     }
 
     let origin = new URL(details["url"])["origin"];
-    await processSearch(origin);
+    if (queue_req.isEmpty() === true) {
+        chrome.storage.local.get(["checked", "withExposedGit"], result => processSearch(result, origin));
+    } else {
+        queue_listener.enqueue(origin);
+    }
 }
 
 
-function checkUrl(origin, callback) {
+function checkUrl(storage, origin) {
     let hostname = new URL(origin)["hostname"];
 
     if (origin.startsWith("chrome-extension")) {
-        callback(false);
-        return;
+        return false;
     }
-
-    chrome.storage.local.get(["checked"], function (result) {
-        if (result.checked && !result.checked.includes(origin) && checkBlacklist(hostname) === false) {
-            callback(true);
-        } else {
-            callback(false);
-        }
-    });
+    return (storage.checked.includes(origin) === false && checkBlacklist(hostname) === false);
 }
 
 
-async function processSearch(origin) {
-    //alert('processSearch');
-    checkUrl(origin, async function (result) {
-        if (result) {
-            if (queue_running === false) {
-                queue_running = true;
-                await queue_req.enqueue(origin);
-                while (queue_listener.isEmpty() === false) {
-                    let origin2 = queue_listener.dequeue();
-                    checkUrl(origin, async function (result2) {
-                        if (result2) {
-                            await queue_req.enqueue(origin2);
-                        }
-                    });
+async function processSearch(storage, origin) {
+    if (checkUrl(storage, origin)) {
+        if (queue_running === false) {
+            queue_running = true;
+            queue_req.enqueue(origin);
+            while (queue_listener.isEmpty() === false) {
+                let origin2 = queue_listener.dequeue();
+                if (checkUrl(storage, origin2)) {
+                    queue_req.enqueue(origin2);
                 }
-                await precessQueue();
-                queue_running = false;
-            } else {
-                await queue_listener.enqueue(origin);
             }
+            await precessQueue(storage);
+            queue_running = false;
+        } else {
+            queue_listener.enqueue(origin);
         }
-    });
+    }
 }
 
 
@@ -727,14 +716,10 @@ function Queue() {
         console.log(collection);
     };
     this.enqueue = function (element) {
-        checkUrl(element, function (result) {
-            if (result) {
-                // works for strings not objects
-                if (collection.indexOf(element) === -1) {
-                    collection.push(element);
-                }
-            }
-        });
+        // works for strings not objects
+        if (collection.indexOf(element) === -1) {
+            collection.push(element);
+        }
     };
     this.dequeue = function () {
         return collection.shift();
@@ -748,13 +733,10 @@ function Queue() {
     this.isEmpty = function () {
         return (collection.length === 0);
     };
-    this.inQueue = function (element) {
-        return (collection.indexOf(element) !== -1);
-    }
 }
 
 
-async function precessQueue() {
+async function precessQueue(visitedSite) {
     while (queue_req.isEmpty() !== true) {
         let url = queue_req.front();
         let securitytxt = null;
