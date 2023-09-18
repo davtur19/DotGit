@@ -35,8 +35,6 @@ More info [here](https://github.com/davtur19/DotGit/blob/b0f589dfd78396990b8d17e
 - Changing the download settings is recommended as by default the values are kept low to avoid problems for those who do
   not have a good connection or a good CPU, however too high values could freeze the browser even on powerful computers
 - By default, svn, mercurial and dotenv are disabled, to activate them just go to settings and turn them on
-- The domain takeover check works at the DNS level, if you have any DNS blocks, then it will give you false positives.
-
 
 ## Screenshot
 
