@@ -3,8 +3,7 @@ const DEFAULT_OPTIONS = {
         "git": true,
         "svn": false,
         "hg": false,
-        "env": false,
-        "domtakeover": false,
+        "env": false
     },
     "color": "grey",
     "max_sites": 100,
@@ -100,7 +99,6 @@ let check_git;
 let check_svn;
 let check_hg;
 let check_env;
-let check_domtakeover;
 let failed_in_a_row;
 let queue_listener = new Queue();
 let queue_req = new Queue();
@@ -282,38 +280,6 @@ async function checkEnv(url) {
     }
 
     return false;
-}
-
-async function checkDomtakeover(request) {
-    chrome.storage.local.get(["withExposedGit"], function (storagedomtakeover) {
-        if (request.error === 'NS_ERROR_UNKNOWN_HOST') {
-            let url = new URL(request.url)["origin"];
-
-            let originUrl = 'error';
-            if (typeof request.originUrl !== "undefined") {
-                originUrl = request.originUrl;
-            } else if (typeof request.documentUrl !== "undefined") {
-                originUrl = request.documentUrl;
-            }
-
-            if (originUrl === 'error') {
-                return;
-            }
-
-            let obj = {type: "domtakeover", url: url, originurl: originUrl, securitytxt: false};
-
-            if (storagedomtakeover.withExposedGit.some(e => e.type === "domtakeover" && e.url === url)) {
-                console.log('non salva');
-                return;
-            }
-
-            setBadge();
-            notification("Found domain takeover", originUrl);
-            console.log(storagedomtakeover);
-            storagedomtakeover.withExposedGit.push(obj);
-            chrome.storage.local.set(storagedomtakeover);
-        }
-    });
 }
 
 
@@ -523,7 +489,6 @@ function set_options(options) {
     check_svn = options.functions.svn;
     check_hg = options.functions.hg;
     check_env = options.functions.env;
-    check_domtakeover = options.functions.domtakeover;
     blacklist = options.blacklist;
 }
 
@@ -581,9 +546,6 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
         sendResponse({status: true});
     } else if (request.type === "env") {
         check_env = request.value;
-        sendResponse({status: true});
-    } else if (request.type === "domtakeover") {
-        check_domtakeover = request.value;
         sendResponse({status: true});
     } else if (request.type === "notification_new_git") {
         notification_new_git = request.value;
@@ -652,8 +614,6 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
     set_options(result.options);
 
     chrome.webRequest.onHeadersReceived.addListener(details => processListener(details), {urls: ["<all_urls>"]});
-    chrome.webRequest.onErrorOccurred.addListener(details => checkDomtakeover(details, result), {urls: ["<all_urls>"]});
-
 });
 
 // Reset download status at each start
@@ -663,10 +623,6 @@ chrome.storage.local.set({
 
 
 function processListener(details) {
-    if(!(check_git || check_svn || check_hg || check_env)) {
-        return;
-    }
-
     let origin = new URL(details["url"])["origin"];
     if (queue_req.isEmpty() === true) {
         chrome.storage.local.get(["checked", "withExposedGit"], result => processSearch(result, origin));
@@ -736,7 +692,6 @@ async function precessQueue(visitedSite) {
     while (queue_req.isEmpty() !== true) {
         let url = queue_req.front();
         let securitytxt = null;
-        let findings = [];
         // replace ws and wss with http and https
         url = url.replace(WS_SEARCH, WS_REPLACE);
 
@@ -750,12 +705,13 @@ async function precessQueue(visitedSite) {
                     securitytxt = await checkSecuritytxt(url);
                 }
 
-                findings.push({
+                visitedSite.withExposedGit.push({
                     type: "git",
                     url: url,
                     open: open,
                     securitytxt: securitytxt
                 });
+                chrome.storage.local.set(visitedSite);
             }
         }
         if (check_svn) {
@@ -763,7 +719,8 @@ async function precessQueue(visitedSite) {
                 if (check_securitytxt && securitytxt === null) {
                     securitytxt = await checkSecuritytxt(url);
                 }
-                findings.push({type: "svn", url: url, securitytxt: securitytxt});
+                visitedSite.withExposedGit.push({type: "svn", url: url, securitytxt: securitytxt});
+                chrome.storage.local.set(visitedSite);
             }
         }
         if (check_hg) {
@@ -771,7 +728,8 @@ async function precessQueue(visitedSite) {
                 if (check_securitytxt && securitytxt === null) {
                     securitytxt = await checkSecuritytxt(url);
                 }
-                findings.push({type: "hg", url: url, securitytxt: securitytxt});
+                visitedSite.withExposedGit.push({type: "hg", url: url, securitytxt: securitytxt});
+                chrome.storage.local.set(visitedSite);
             }
         }
         if (check_env) {
@@ -779,17 +737,12 @@ async function precessQueue(visitedSite) {
                 if (check_securitytxt && securitytxt === null) {
                     securitytxt = await checkSecuritytxt(url);
                 }
-                findings.push({type: "env", url: url, securitytxt: securitytxt});
+                visitedSite.withExposedGit.push({type: "env", url: url, securitytxt: securitytxt});
+                chrome.storage.local.set(visitedSite);
             }
         }
-
-        chrome.storage.local.get(["withExposedGit", "checked"], function (result) {
-           findings.forEach(function (obj) {
-               result.withExposedGit.push(obj);
-           });
-           result.checked.push(url);
-           chrome.storage.local.set(result);
-        });
+        visitedSite.checked.push(url);
+        chrome.storage.local.set(visitedSite);
         queue_req.dequeue();
     }
 }
