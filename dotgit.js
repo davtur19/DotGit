@@ -667,18 +667,20 @@ chrome.storage.local.set({
 
 
 function processListener(details) {
-    console.log('processListener');
     if (!(check_git || check_svn || check_hg || check_env)) {
         return;
     }
 
     let origin = new URL(details["url"])["origin"];
-    chrome.storage.local.get(["checked", "withExposedGit"], result => processSearch(result, origin));
+    if (queue_req.isEmpty() === true) {
+        chrome.storage.local.get(["checked", "withExposedGit"], result => processSearch(result, origin));
+    } else {
+        queue_listener.enqueue(origin);
+    }
 }
 
 
 function checkUrl(storage, origin) {
-    console.log('checkUrl');
     let hostname = new URL(origin)["hostname"];
 
     if (origin.startsWith("chrome-extension")) {
@@ -689,20 +691,17 @@ function checkUrl(storage, origin) {
 
 
 async function processSearch(storage, origin) {
-    console.log('processSearch');
     if (checkUrl(storage, origin)) {
         if (queue_running === false) {
             queue_running = true;
-            console.log('queue_req.enqueue 1 ' + origin);
             queue_req.enqueue(origin);
             while (queue_listener.isEmpty() === false) {
                 let origin2 = queue_listener.dequeue();
                 if (checkUrl(storage, origin2)) {
-                    console.log('queue_req.enqueue 2 ' + origin2)
                     queue_req.enqueue(origin2);
                 }
             }
-            await processQueue();
+            await precessQueue(storage);
             queue_running = false;
         } else {
             queue_listener.enqueue(origin);
@@ -737,75 +736,66 @@ function Queue() {
 }
 
 
-async function processQueue() {
-    console.log('processQueue');
-    console.log('isEmpty ' + queue_req.isEmpty());
+async function precessQueue(visitedSite) {
     while (queue_req.isEmpty() !== true) {
-        let origin = queue_req.dequeue();
-        console.log('origin ' + origin);
-        await doQueue(origin);
-    }
-}
+        let url = queue_req.front();
+        let securitytxt = null;
+        let findings = [];
+        // replace ws and wss with http and https
+        url = url.replace(WS_SEARCH, WS_REPLACE);
 
-async function doQueue(origin) {
-    console.log('doQueue');
-    let url = origin;
-    let securitytxt = null;
-    let findings = [];
-    // replace ws and wss with http and https
-    url = url.replace(WS_SEARCH, WS_REPLACE);
+        if (check_git) {
+            if (await checkGit(url) !== false) {
+                let open = false;
+                if (check_opensource) {
+                    open = await isOpenSource(url);
+                }
+                if (check_securitytxt) {
+                    securitytxt = await checkSecuritytxt(url);
+                }
 
-    if (check_git) {
-        if (await checkGit(url) !== false) {
-            let open = false;
-            if (check_opensource) {
-                open = await isOpenSource(url);
+                findings.push({
+                    type: "git",
+                    url: url,
+                    open: open,
+                    securitytxt: securitytxt
+                });
             }
-            if (check_securitytxt) {
-                securitytxt = await checkSecuritytxt(url);
+        }
+        if (check_svn) {
+            if (await checkSvn(url) !== false) {
+                if (check_securitytxt && securitytxt === null) {
+                    securitytxt = await checkSecuritytxt(url);
+                }
+                findings.push({type: "svn", url: url, securitytxt: securitytxt});
             }
+        }
+        if (check_hg) {
+            if (await checkHg(url) !== false) {
+                if (check_securitytxt && securitytxt === null) {
+                    securitytxt = await checkSecuritytxt(url);
+                }
+                findings.push({type: "hg", url: url, securitytxt: securitytxt});
+            }
+        }
+        if (check_env) {
+            if (await checkEnv(url) !== false) {
+                if (check_securitytxt && securitytxt === null) {
+                    securitytxt = await checkSecuritytxt(url);
+                }
+                findings.push({type: "env", url: url, securitytxt: securitytxt});
+            }
+        }
 
-            findings.push({
-                type: "git",
-                url: url,
-                open: open,
-                securitytxt: securitytxt
+        chrome.storage.local.get(["withExposedGit", "checked"], function (result) {
+            findings.forEach(function (obj) {
+                result.withExposedGit.push(obj);
             });
-        }
-    }
-    if (check_svn) {
-        if (await checkSvn(url) !== false) {
-            if (check_securitytxt && securitytxt === null) {
-                securitytxt = await checkSecuritytxt(url);
-            }
-            findings.push({type: "svn", url: url, securitytxt: securitytxt});
-        }
-    }
-    if (check_hg) {
-        if (await checkHg(url) !== false) {
-            if (check_securitytxt && securitytxt === null) {
-                securitytxt = await checkSecuritytxt(url);
-            }
-            findings.push({type: "hg", url: url, securitytxt: securitytxt});
-        }
-    }
-    if (check_env) {
-        if (await checkEnv(url) !== false) {
-            if (check_securitytxt && securitytxt === null) {
-                securitytxt = await checkSecuritytxt(url);
-            }
-            findings.push({type: "env", url: url, securitytxt: securitytxt});
-        }
-    }
-
-    return chrome.storage.local.get(["withExposedGit", "checked"], await function (result) {
-        console.log('storage' + JSON.stringify(result));
-        findings.forEach(function (obj) {
-            result.withExposedGit.push(obj);
+            result.checked.push(url);
+            chrome.storage.local.set(result);
         });
-        result.checked.push(url);
-        return chrome.storage.local.set(result);
-    });
+        queue_req.dequeue();
+    }
 }
 
 
