@@ -364,9 +364,11 @@ function startDownload(baseUrl, downloadFinished) {
             downloadStatus.total++;
 
             fetch(baseUrl + GIT_PATH + path, {
-                redirect: "manual"
+                redirect: "manual",
+                headers: { "Accept": "text/html" },
             }).then(function (response) {
                 downloadStats[response.status] = (typeof downloadStats[response.status] === "undefined") ? 1 : downloadStats[response.status] + 1;
+                // ignore status code?
                 if (response.ok && response.status === 200) {
                     fileExist = true;
                     downloadStatus.successful++;
@@ -386,8 +388,12 @@ function startDownload(baseUrl, downloadFinished) {
 
                     if (decompress) {
                         // decompress objects
-                        let data = pako.ungzip(words);
-                        callback(arrayBufferToString(data));
+                        try {
+                            let data = pako.ungzip(words);
+                            callback(arrayBufferToString(data));
+                        } catch (e) {
+                            // do nothing
+                        }
                     } else {
                         // plaintext file
                         callback(arrayBufferToString(words));
