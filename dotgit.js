@@ -1,3 +1,6 @@
+import "/lib/jszip.min.js";
+import "/lib/pako_inflate.min.js";
+
 const DEFAULT_OPTIONS = {
     "functions": {
         "git": true,
@@ -64,7 +67,7 @@ const SECURITYTXT_PATHS = [
     "/.well-known/security.txt",
     "/security.txt",
 ];
-SECURITYTXT_SEARCH = "Contact: ";
+const SECURITYTXT_SEARCH = "Contact: ";
 
 const GIT_WELL_KNOW_PATHS = [
     "HEAD",
@@ -143,11 +146,19 @@ function sendDownloadStatus(url, downloadStatus) {
 // it may happen that the badge is set at the same time by several checks, in this way it could be increased only once
 function setBadge() {
     // Not supported on Firefox for Android
-    if (chrome.browserAction.setBadgeText) {
+    if (typeof chrome.browserAction !== "undefined" && typeof chrome.browserAction.setBadgeText !== "undefined") {
         chrome.browserAction.getBadgeText({}, function (result) {
             let n = parseInt(result);
             let text = (isNaN(n) ? 0 : n) + 1;
             chrome.browserAction.setBadgeText({
+                text: text.toString()
+            });
+        });
+    } else if (typeof chrome.action !== "undefined" && typeof chrome.action.setBadgeText !== "undefined") {
+        chrome.action.getBadgeText({}, function (result) {
+            let n = parseInt(result);
+            let text = (isNaN(n) ? 0 : n) + 1;
+            chrome.action.setBadgeText({
                 text: text.toString()
             });
         });
@@ -326,10 +337,9 @@ function startDownload(baseUrl, downloadFinished) {
             });
             zip.file("DownloadStats.txt", strStatus);
 
-            zip.generateAsync({type: "blob"}).then(function (content) {
+            zip.generateAsync({type: "base64"}).then(function (zipData) {
                 // download zip
-                const url = URL.createObjectURL(content);
-                chrome.downloads.download({url: url, filename: `${filename}.zip`});
+                chrome.downloads.download({url: `data:application/octet-stream;base64,${zipData}`, filename: `${filename}.zip`});
                 downloadFinished(fileExist, downloadStats);
             });
         }

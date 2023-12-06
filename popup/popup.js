@@ -5,7 +5,7 @@ if (typeof browser !== "undefined") {
 }
 
 // Not supported on Firefox for Android
-if (chrome.browserAction.setBadgeText) {
+if (typeof chrome.browserAction !== "undefined" && typeof chrome.browserAction.setBadgeText !== "undefined") {
     chrome.browserAction.setBadgeText({
         text: ""
     });
@@ -14,6 +14,10 @@ if (chrome.browserAction.setBadgeText) {
     /*document.addEventListener("DOMContentLoaded", function () {
         document.getElementById("hostsFound").style.width = "380px";
     });*/
+} else if (typeof chrome.action !== "undefined" && typeof chrome.action.setBadgeText !== "undefined") {
+    chrome.action.setBadgeText({
+        text: ""
+    });
 }
 
 
@@ -225,24 +229,25 @@ document.addEventListener("click", (event) => {
     }
 });
 
+document.addEventListener("DOMContentLoaded", function() {
+    chrome.storage.local.get(["withExposedGit", "downloading", "options"], function (visitedSite) {
+        if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
+            let hostElementFoundTitle= document.getElementById("hostsFoundTitle");
+            let max_sites = visitedSite.options.max_sites
+            hostElementFoundTitle.textContent = "Total found: " + visitedSite.withExposedGit.length + " Max shown: " + max_sites;
 
-chrome.storage.local.get(["withExposedGit", "downloading", "options"], function (visitedSite) {
-    if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
-        let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
-        let max_sites = visitedSite.options.max_sites
-        hostElementFoundTitle.textContent = "Total found: " + visitedSite.withExposedGit.length + " Max shown: " + max_sites;
-
-        let hostElementFound = document.getElementById("hostsFound");
-        if (typeof visitedSite.downloading !== "undefined" && visitedSite.downloading.length !== 0) {
-            addElements(hostElementFound, visitedSite.withExposedGit, function (url) {
-                return `${url}`;
-            }, visitedSite.downloading, max_sites);
-        } else {
-            addElements(hostElementFound, visitedSite.withExposedGit, function (url) {
-                return `${url}`;
-            }, [], max_sites);
+            let hostElementFound = document.getElementById("hostsFound");
+            if (typeof visitedSite.downloading !== "undefined" && visitedSite.downloading.length !== 0) {
+                addElements(hostElementFound, visitedSite.withExposedGit, function (url) {
+                    return `${url}`;
+                }, visitedSite.downloading, max_sites);
+            } else {
+                addElements(hostElementFound, visitedSite.withExposedGit, function (url) {
+                    return `${url}`;
+                }, [], max_sites);
+            }
         }
-    }
+    });
 });
 
 
