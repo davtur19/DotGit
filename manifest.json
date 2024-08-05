@@ -23,6 +23,9 @@
     "wss://*/*"
   ],
   "background": {
+    "scripts": [
+      "dotgit.js"
+    ],
     "service_worker": "dotgit.js",
     "type": "module"
   },
