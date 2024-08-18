@@ -6,7 +6,8 @@ const DEFAULT_OPTIONS = {
         "git": true,
         "svn": false,
         "hg": false,
-        "env": false
+        "env": false,
+        "ds_store": true
     },
     "color": "grey",
     "max_sites": 100,
@@ -50,6 +51,9 @@ const HG_MANIFEST_HEADERS = [
 
 const ENV_PATH = "/.env";
 const ENV_SEARCH = "^[A-Z_]+=|^[#\\n\\r ][\\s\\S]*^[A-Z_]+=";
+
+const DS_STORE = "/.DS_Store";
+const DS_STORE_HEADER = "\x00@\x00";
 
 const GIT_TREE_HEADER = "tree ";
 const GIT_OBJECTS_PATH = "objects/";
@@ -102,6 +106,7 @@ let check_git;
 let check_svn;
 let check_hg;
 let check_env;
+let check_ds_store;
 let failed_in_a_row;
 let queue_listener = new Queue();
 let queue_req = new Queue();
@@ -198,6 +203,33 @@ async function checkGit(url) {
                 // .git found
                 setBadge();
                 notification("Found an exposed .git", to_check);
+                return true;
+            }
+        }
+    } catch (error) {
+        // Timeouts if the request takes longer than X seconds
+        //console.log(error.name);
+    }
+
+    return false;
+}
+
+async function checkDSStore(url) {
+    const to_check = url + DS_STORE;
+
+    try {
+        const response = await fetchWithTimeout(to_check, {
+            redirect: "manual",
+            timeout: 10000
+        });
+
+        if (response.status === 200) {
+            let text = await response.text();
+            console.log(response.text());
+            if (text !== false && text.startsWith(DS_STORE_HEADER[0]) === true) {
+                
+                setBadge();
+                notification("Found an exposed .DS_Store", to_check);
                 return true;
             }
         }
@@ -505,6 +537,7 @@ function set_options(options) {
     check_svn = options.functions.svn;
     check_hg = options.functions.hg;
     check_env = options.functions.env;
+    check_ds_store = options.functions.ds_store;
     blacklist = options.blacklist;
 }
 
@@ -557,7 +590,9 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     } else if (request.type === "svn") {
         check_svn = request.value;
         sendResponse({status: true});
-    } else if (request.type === "hg") {
+    } else if (request.type === "ds_store") {
+        check_ds_store = request.value;
+    }  else if (request.type === "hg") {
         check_hg = request.value;
         sendResponse({status: true});
     } else if (request.type === "env") {
@@ -739,6 +774,17 @@ async function precessQueue(visitedSite) {
                 chrome.storage.local.set(visitedSite);
             }
         }
+
+        if (check_ds_store) {
+            if (await checkDSStore(url) !== false ) {
+                if (check_securitytxt && securitytxt === null ) {
+                    securitytxt = await checkSecuritytxt(url);
+                }
+                visitedSite.withExposedGit.push({type: "ds_store", url: url, securitytxt: securitytxt});
+                chrome.storage.local.set(visitedSite);
+            }
+        }
+
         if (check_hg) {
             if (await checkHg(url) !== false) {
                 if (check_securitytxt && securitytxt === null) {
