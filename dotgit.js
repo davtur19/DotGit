@@ -53,7 +53,7 @@ const ENV_PATH = "/.env";
 const ENV_SEARCH = "^[A-Z_]+=|^[#\\n\\r ][\\s\\S]*^[A-Z_]+=";
 
 const DS_STORE = "/.DS_Store";
-const DS_STORE_HEADER = "^\x00\x00\x00\x01Bud1";
+const DS_STORE_HEADER = "\x00\x00\x00\x01Bud1";
 
 const GIT_TREE_HEADER = "tree ";
 const GIT_OBJECTS_PATH = "objects/";
