@@ -10,6 +10,7 @@ An extension for checking if .git is exposed in visited websites
 
 - Check if a .git/.svn/.hg folder exists for each site you visit
 - Check if a .env file exists for each site you visit
+- Check if a .DS_Store file exists for each site you visit (Thanks to [@rodnt](https://github.com/rodnt))
 - Check if the site is open source (github/gitlab)
 - Check if the site has security.txt
 - You will be notified when a folder is found
