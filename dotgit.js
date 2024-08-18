@@ -370,8 +370,9 @@ function startDownload(baseUrl, downloadFinished) {
 
             zip.generateAsync({type: "base64"}).then(function (zipData) {
                 // download zip
+                let blob = new Blob([zipData], {type: "application/zip;charset=utf-8"})
                 chrome.downloads.download({
-                    url: `data:application/octet-stream;base64,${zipData}`,
+                    url: URL.createObjectURL(blob), //`data:application/octet-stream;base64,${zipData}`,
                     filename: `${filename}.zip`
                 });
                 downloadFinished(fileExist, downloadStats);
