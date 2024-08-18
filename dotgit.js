@@ -7,7 +7,7 @@ const DEFAULT_OPTIONS = {
         "svn": false,
         "hg": false,
         "env": false,
-        "ds_store": true
+        "ds_store": false
     },
     "color": "grey",
     "max_sites": 100,
