@@ -135,6 +135,12 @@ function addElements(element, array, callback, downloading, max_sites) {
             }
             link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.svn/");
         }
+        if (callback(array[i].type) === "ds_store") {
+            if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
+                listItem.appendChild(spanSecuritytxtStatus);
+            }
+            link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.DS_Store");
+        }
         if (callback(array[i].type) === "hg") {
             if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
                 listItem.appendChild(spanSecuritytxtStatus);
