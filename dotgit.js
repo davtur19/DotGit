@@ -214,33 +214,6 @@ async function checkGit(url) {
     return false;
 }
 
-async function checkDSStore(url) {
-    const to_check = url + DS_STORE;
-
-    try {
-        const response = await fetchWithTimeout(to_check, {
-            redirect: "manual",
-            timeout: 10000
-        });
-
-        if (response.status === 200) {
-            let text = await response.text();
-            console.log(response.text());
-            if (text !== false && text.startsWith(DS_STORE_HEADER[0]) === true) {
-                
-                setBadge();
-                notification("Found an exposed .DS_Store", to_check);
-                return true;
-            }
-        }
-    } catch (error) {
-        // Timeouts if the request takes longer than X seconds
-        //console.log(error.name);
-    }
-
-    return false;
-}
-
 async function checkSvn(url) {
     const to_check = url + SVN_DB_PATH;
 
@@ -325,6 +298,33 @@ async function checkEnv(url) {
     return false;
 }
 
+async function checkDSStore(url) {
+    const to_check = url + DS_STORE;
+
+    try {
+        const response = await fetchWithTimeout(to_check, {
+            redirect: "manual",
+            timeout: 10000
+        });
+
+        if (response.status === 200) {
+            let text = await response.text();
+            console.log(response.text());
+            if (text !== false && text.startsWith(DS_STORE_HEADER[0]) === true) {
+
+                setBadge();
+                notification("Found an exposed .DS_Store", to_check);
+                return true;
+            }
+        }
+    } catch (error) {
+        // Timeouts if the request takes longer than X seconds
+        //console.log(error.name);
+    }
+
+    return false;
+}
+
 
 function startDownload(baseUrl, downloadFinished) {
     const downloadedFiles = [];
@@ -371,7 +371,10 @@ function startDownload(baseUrl, downloadFinished) {
 
             zip.generateAsync({type: "base64"}).then(function (zipData) {
                 // download zip
-                chrome.downloads.download({url: `data:application/octet-stream;base64,${zipData}`, filename: `${filename}.zip`});
+                chrome.downloads.download({
+                    url: `data:application/octet-stream;base64,${zipData}`,
+                    filename: `${filename}.zip`
+                });
                 downloadFinished(fileExist, downloadStats);
             });
         }
@@ -407,7 +410,7 @@ function startDownload(baseUrl, downloadFinished) {
 
             fetch(baseUrl + GIT_PATH + path, {
                 redirect: "manual",
-                headers: { "Accept": "text/html" },
+                headers: {"Accept": "text/html"},
             }).then(function (response) {
                 downloadStats[response.status] = (typeof downloadStats[response.status] === "undefined") ? 1 : downloadStats[response.status] + 1;
                 // ignore status code?
@@ -590,14 +593,14 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     } else if (request.type === "svn") {
         check_svn = request.value;
         sendResponse({status: true});
-    } else if (request.type === "ds_store") {
-        check_ds_store = request.value;
-    }  else if (request.type === "hg") {
+    } else if (request.type === "hg") {
         check_hg = request.value;
         sendResponse({status: true});
     } else if (request.type === "env") {
         check_env = request.value;
         sendResponse({status: true});
+    } else if (request.type === "ds_store") {
+        check_ds_store = request.value;
     } else if (request.type === "notification_new_git") {
         notification_new_git = request.value;
         sendResponse({status: true});
@@ -774,17 +777,6 @@ async function precessQueue(visitedSite) {
                 chrome.storage.local.set(visitedSite);
             }
         }
-
-        if (check_ds_store) {
-            if (await checkDSStore(url) !== false ) {
-                if (check_securitytxt && securitytxt === null ) {
-                    securitytxt = await checkSecuritytxt(url);
-                }
-                visitedSite.withExposedGit.push({type: "ds_store", url: url, securitytxt: securitytxt});
-                chrome.storage.local.set(visitedSite);
-            }
-        }
-
         if (check_hg) {
             if (await checkHg(url) !== false) {
                 if (check_securitytxt && securitytxt === null) {
@@ -800,6 +792,15 @@ async function precessQueue(visitedSite) {
                     securitytxt = await checkSecuritytxt(url);
                 }
                 visitedSite.withExposedGit.push({type: "env", url: url, securitytxt: securitytxt});
+                chrome.storage.local.set(visitedSite);
+            }
+        }
+        if (check_ds_store) {
+            if (await checkDSStore(url) !== false) {
+                if (check_securitytxt && securitytxt === null) {
+                    securitytxt = await checkSecuritytxt(url);
+                }
+                visitedSite.withExposedGit.push({type: "ds_store", url: url, securitytxt: securitytxt});
                 chrome.storage.local.set(visitedSite);
             }
         }

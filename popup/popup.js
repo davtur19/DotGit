@@ -135,12 +135,6 @@ function addElements(element, array, callback, downloading, max_sites) {
             }
             link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.svn/");
         }
-        if (callback(array[i].type) === "ds_store") {
-            if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
-                listItem.appendChild(spanSecuritytxtStatus);
-            }
-            link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.DS_Store");
-        }
         if (callback(array[i].type) === "hg") {
             if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
                 listItem.appendChild(spanSecuritytxtStatus);
@@ -152,6 +146,12 @@ function addElements(element, array, callback, downloading, max_sites) {
                 listItem.appendChild(spanSecuritytxtStatus);
             }
             link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.env");
+        }
+        if (callback(array[i].type) === "ds_store") {
+            if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
+                listItem.appendChild(spanSecuritytxtStatus);
+            }
+            link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.DS_Store");
         }
         link.innerText = callback(array[i].url);
 
@@ -235,10 +235,10 @@ document.addEventListener("click", (event) => {
     }
 });
 
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", function () {
     chrome.storage.local.get(["withExposedGit", "downloading", "options"], function (visitedSite) {
         if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
-            let hostElementFoundTitle= document.getElementById("hostsFoundTitle");
+            let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
             let max_sites = visitedSite.options.max_sites
             hostElementFoundTitle.textContent = "Total found: " + visitedSite.withExposedGit.length + " Max shown: " + max_sites;
 
