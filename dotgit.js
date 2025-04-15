@@ -920,12 +920,10 @@ chrome.runtime.onInstalled.addListener(async (details) => {
             options: DEFAULT_OPTIONS
         });
 
-        // Verifica se abbiamo già i permessi prima di mostrare il messaggio
         const hasPermissions = await browser.permissions.contains({
             origins: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"]
         });
 
-        // Mostra il messaggio di benvenuto solo se non abbiamo i permessi
         if (!hasPermissions) {
             notification("Welcome to DotGit!", "Click the extension icon to get started. You'll need to grant permissions to check for exposed Git repositories.");
         }
