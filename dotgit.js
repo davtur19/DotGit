@@ -574,7 +574,7 @@ function checkOptions(default_options, storage_options) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     debugLog('Received message:', msg.type);
-    
+
     if (msg.type === "FINDINGS_FOUND") {
         chrome.storage.local.get(["withExposedGit"], async (result) => {
             try {
@@ -582,7 +582,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const data = msg.data;
                 const origin = data.url;
                 let updatedList = false;
-                
+
                 for (const type of data.types) {
                     const findingUrl = origin + (
                         type === 'git' ? GIT_PATH :
@@ -591,8 +591,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                         type === 'env' ? ENV_PATH :
                         DS_STORE
                     );
-                    
-                    if (!withExposedGit.some(item => 
+
+                    if (!withExposedGit.some(item =>
                         item.url === origin && item.type === type
                     )) {
                         withExposedGit.push({
@@ -603,7 +603,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                             foundAt: findingUrl
                         });
                         updatedList = true;
-                        
+
                         chrome.notifications.create({
                             type: "basic",
                             iconUrl: chrome.runtime.getURL(EXTENSION_ICON["48"]),
@@ -612,12 +612,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                         });
                     }
                 }
-                
+
                 if (updatedList) {
                     await chrome.storage.local.set({withExposedGit});
                     await setBadge();
                 }
-                
+
                 sendResponse({status: true});
             } catch (error) {
                 debugLog('Error processing findings:', error);
@@ -641,8 +641,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 }
             }
 
-            notification("Download status", 
-                fileExist 
+            notification("Download status",
+                fileExist
                     ? `Downloaded ${msg.url}\n${strStatus}`
                     : `Failed to download ${msg.url}\nNo files found\n${strStatus}`
             );
@@ -790,7 +790,7 @@ async function requestPermissions() {
 
 async function processListener(details) {
     const origin = new URL(details.url).origin;
-    
+
     if (!check_failed && (details.error || details.statusCode >= 400)) {
         return;
     }
@@ -893,7 +893,7 @@ function isValidUrl(string) {
 chrome.runtime.onInstalled.addListener(async (details) => {
     if (details.reason === 'install' || details.reason === 'update') {
         debugLog('Extension installed/updated');
-        
+
         await chrome.storage.local.set({
             checked: [],
             withExposedGit: [],
@@ -907,14 +907,14 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
         if (!hasPermissions) {
             notification("Welcome to DotGit!", "Click the extension icon to get started. You'll need to grant permissions to check for exposed Git repositories.");
-    }
+        }
     }
 });
 
 // Modify storage change listener to be more concise
 chrome.storage.onChanged.addListener((changes, namespace) => {
     if (namespace === 'local' && changes.withExposedGit) {
-        debugLog('Storage updated - new findings count:', 
+        debugLog('Storage updated - new findings count:',
             changes.withExposedGit.newValue ? changes.withExposedGit.newValue.length : 0
         );
     }
