@@ -17,6 +17,8 @@ function set_gui(options) {
     document.getElementById("ds_storeOff").checked = !options.functions.ds_store;
     document.getElementById("debugOn").checked = options.debug;
     document.getElementById("debugOff").checked = !options.debug;
+    document.getElementById("checkFailedOn").checked = options.check_failed;
+    document.getElementById("checkFailedOff").checked = !options.check_failed;
     document.getElementById("max_sites").value = options.max_sites;
     document.getElementById("max_connections").value = options.download.max_connections;
     document.getElementById("failed_in_a_row").value = options.download.failed_in_a_row;
@@ -122,6 +124,14 @@ document.addEventListener("DOMContentLoaded", function () {
                 chrome.runtime.sendMessage({
                     type: e.target.name,
                     value: result.options.debug
+                }, function (response) {
+                });
+            } else if (e.target.name === "check_failed") {
+                result.options.check_failed = (e.target.value === "on");
+                chrome.storage.local.set(result);
+                chrome.runtime.sendMessage({
+                    type: e.target.name,
+                    value: result.options.check_failed
                 }, function (response) {
                 });
             } else if (e.target.validity.valid === true && (e.target.id === "max_connections" || e.target.id === "wait" || e.target.id === "max_wait" || e.target.id === "failed_in_a_row")) {

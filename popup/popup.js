@@ -4,6 +4,14 @@ if (typeof browser !== "undefined") {
     HREF_PREFIX = "view-source:";
 }
 
+let debug = false;
+
+function debugLog(...args) {
+    if (debug) {
+        console.log('[DotGit]', ...args);
+    }
+}
+
 // Not supported on Firefox for Android
 if (typeof chrome.browserAction !== "undefined" && typeof chrome.browserAction.setBadgeText !== "undefined") {
     chrome.browserAction.setBadgeText({
@@ -162,16 +170,20 @@ function addElements(element, array, callback, downloading, max_sites) {
 }
 
 
-document.addEventListener("click", (event) => {
+document.addEventListener("click", async (event) => {
     const button = event.target;
 
-    if (button.id === "reset") {
+    if (button.id === "request-permissions") {
+        await requestPermissions();
+    } else if (button.id === "reset") {
         chrome.storage.local.set({
             checked: [],
             withExposedGit: [],
             downloading: []
+        }, () => {
+            // Ricarica solo il popup invece di ricaricare l'intera estensione
+            window.location.reload();
         });
-        chrome.runtime.reload();
     } else if (button.classList.contains("download")) {
         const url = button.id.substring(3);
 
@@ -281,4 +293,61 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
     // this will keep the message channel open to the other end until sendResponse is called
     return true;
+});
+
+async function checkPermissions() {
+    try {
+        const hasPermissions = await browser.permissions.contains({
+            origins: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"]
+        });
+        return hasPermissions;
+    } catch (error) {
+        debugLog('Error checking permissions:', error);
+        return false;
+    }
+}
+
+async function requestPermissions() {
+    try {
+        const granted = await browser.permissions.request({
+            origins: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"]
+        });
+        if (granted) {
+            document.getElementById('permissions-banner').style.display = 'none';
+            // Ricarica il popup per mostrare i contenuti
+            window.location.reload();
+        }
+        return granted;
+    } catch (error) {
+        debugLog('Error requesting permissions:', error);
+        return false;
+    }
+}
+
+document.addEventListener("DOMContentLoaded", async function () {
+    // Carica le opzioni per ottenere il valore di debug
+    chrome.storage.local.get(["options"], function (result) {
+        if (result.options && typeof result.options.debug !== "undefined") {
+            debug = result.options.debug;
+        }
+    });
+
+    // Controlla i permessi all'apertura del popup
+    const hasPermissions = await checkPermissions();
+    if (!hasPermissions) {
+        document.getElementById('permissions-banner').style.display = 'block';
+        // Richiedi automaticamente i permessi
+        await requestPermissions();
+    }
+
+    chrome.storage.local.get(["options"], function (options) {
+        let color = options.options.color;
+        let list = document.getElementsByClassName("custom-color");
+        for (let n = 0; n < list.length; ++n) {
+            list[n].className += " " + color;
+        }
+        let max_sites = options.options.max_sites
+        let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
+        hostElementFoundTitle.textContent = "Total found: 0 Max shown: " + max_sites;
+    });
 });

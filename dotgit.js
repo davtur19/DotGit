@@ -18,6 +18,7 @@ const DEFAULT_OPTIONS = {
     "check_opensource": true,
     "check_securitytxt": true,
     "debug": false,
+    "check_failed": false,
     "download": {
         "wait": 100,
         "max_wait": 10000,
@@ -109,6 +110,7 @@ let check_hg;
 let check_env;
 let check_ds_store;
 let failed_in_a_row;
+let check_failed;
 let blacklist = [];
 let processingUrls = new Set();
 let debug;
@@ -213,7 +215,7 @@ async function checkGit(url) {
         }
     } catch (error) {
         // Timeouts if the request takes longer than X seconds
-        //console.log(error.name);
+        debugLog('Error in checkGit, Timeout:', error);
     }
 
     return false;
@@ -239,7 +241,7 @@ async function checkSvn(url) {
         }
     } catch (error) {
         // Timeouts if the request takes longer than X seconds
-        //console.log(error.name);
+        debugLog('Error in checkSvn, Timeout:', error);
     }
 
     return false;
@@ -270,7 +272,7 @@ async function checkHg(url) {
         }
     } catch (error) {
         // Timeouts if the request takes longer than X seconds
-        //console.log(error.name);
+        debugLog('Error in checkHg, Timeout:', error);
     }
 
     return false;
@@ -297,7 +299,7 @@ async function checkEnv(url) {
         }
     } catch (error) {
         // Timeouts if the request takes longer than X seconds
-        //console.log(error.name);
+        debugLog('Error in checkEnv, Timeout:', error);
     }
 
     return false;
@@ -323,7 +325,7 @@ async function checkDSStore(url) {
         }
     } catch (error) {
         // Timeouts if the request takes longer than X seconds
-        //console.log(error.name);
+        debugLog('Error in checkDSStore, Timeout:', error);
     }
 
     return false;
@@ -557,6 +559,7 @@ function set_options(options) {
     check_env = options.functions.env;
     check_ds_store = options.functions.ds_store;
     debug = options.debug;
+    check_failed = options.check_failed;
     blacklist = options.blacklist;
 }
 
@@ -573,13 +576,13 @@ function checkOptions(default_options, storage_options) {
 }
 
 
-chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     debugLog('Received message:', msg);
     
     if (msg.type === "GIT_FOUND") {
         debugLog('Git repository found at:', msg.url);
         
-        chrome.storage.local.get(["withExposedGit"], function(result) {
+        chrome.storage.local.get(["withExposedGit"], async (result) => {
             const withExposedGit = result.withExposedGit || [];
             
             if (!withExposedGit.some(item => item.url === msg.url)) {
@@ -591,44 +594,44 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
                     securitytxt: false
                 });
                 
-                chrome.storage.local.set({ withExposedGit: withExposedGit }, function() {
-                    debugLog('Storage updated');
-                    setBadge();
-                    
-                    chrome.notifications.create({
-                        type: "basic",
-                        iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
-                        title: ".git esposto!",
-                        message: `Repository Git esposto su: ${msg.url}`
-                    });
+                await chrome.storage.local.set({ withExposedGit: withExposedGit });
+                debugLog('Storage updated');
+                setBadge();
+                
+                await chrome.notifications.create({
+                    type: "basic",
+                    iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
+                    title: "Exposed .git found!",
+                    message: `Git repository exposed at: ${msg.url}`
                 });
             } else {
                 debugLog('Git repository already in list');
             }
+            sendResponse({status: true});
         });
         return true;
     } else if (msg.type === "download") {
         debugLog('Starting download for:', msg.url);
         notification("Download status", "Download started\nPlease wait...");
 
-        startDownload(msg.url, function (fileExist, downloadStats) {
+        startDownload(msg.url, async (fileExist, downloadStats) => {
             let strStatus = "";
 
-            chrome.storage.local.get(["downloading"], function (downloading) {
-                if (typeof downloading.downloading !== "undefined" && downloading.downloading.length !== 0) {
-                    let index = downloading.downloading.indexOf(msg.url);
-                    if (index > -1) {
-                        downloading.downloading.splice(index, 1);
-                    }
-                    chrome.storage.local.set({
-                        downloading: downloading.downloading
-                    });
+            const downloading = await chrome.storage.local.get(["downloading"]);
+            if (downloading.downloading && downloading.downloading.length !== 0) {
+                const index = downloading.downloading.indexOf(msg.url);
+                if (index > -1) {
+                    downloading.downloading.splice(index, 1);
                 }
-            });
+                await chrome.storage.local.set({
+                    downloading: downloading.downloading
+                });
+            }
 
             Object.keys(downloadStats).forEach(function (key) {
                 strStatus += key + ": " + downloadStats[key] + "\n";
             });
+
             if (fileExist) {
                 notification("Download status", "Downloaded " + msg.url + "\n" + strStatus);
                 sendResponse({status: true});
@@ -637,6 +640,7 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
                 sendResponse({status: false});
             }
         });
+        return true;
     } else if (msg.type === "git") {
         check_git = msg.value;
         sendResponse({status: true});
@@ -666,6 +670,22 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
     } else if (msg.type === "debug") {
         debug = msg.value;
         sendResponse({status: true});
+    } else if (msg.type === "check_failed") {
+        check_failed = msg.value;
+        // Rimuovi il listener esistente se presente
+        try {
+            chrome.webRequest.onErrorOccurred.removeListener(processListener);
+        } catch (e) {
+            // Ignora se il listener non esiste
+        }
+        // Aggiungi il nuovo listener solo se l'opzione è attiva
+        if (msg.value) {
+            chrome.webRequest.onErrorOccurred.addListener(
+                details => processListener(details),
+                {urls: ["<all_urls>"]}
+            );
+        }
+        sendResponse({status: true});
     } else if (msg.type === "blacklist") {
         blacklist = msg.value;
         sendResponse({status: true});
@@ -688,7 +708,7 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
     } else if (msg.type === "REQUEST_GIT_CHECK") {
         const {origin, pageUrl} = msg;
 
-        chrome.storage.local.get(["options", "checked"], (result) => {
+        chrome.storage.local.get(["options", "checked"], async (result) => {
             const options = result.options || DEFAULT_OPTIONS;
             const alreadyChecked = result.checked || [];
 
@@ -699,46 +719,47 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
             debugLog("Is enabled: ", isEnabled);
 
             if (!isEnabled || alreadyDone) {
-                return sendResponse({shouldFetch: false});
+                sendResponse({shouldFetch: false});
+                return;
             }
 
-            // Puoi anche aggiornare checked subito qui
             alreadyChecked.push(origin);
-            chrome.storage.local.set({checked: alreadyChecked});
-
+            await chrome.storage.local.set({checked: alreadyChecked});
             sendResponse({shouldFetch: true});
         });
-
-        // Necessario per risposte asincrone
         return true;
     } else if (msg.type === "GIT_FETCH_RESULT") {
         const {gitUrl, gitHeadContent, pageUrl} = msg;
 
-        chrome.storage.local.get(["options", "withExposedGit"], (result) => {
+        chrome.storage.local.get(["options", "withExposedGit"], async (result) => {
             const options = result.options || DEFAULT_OPTIONS;
             const exposed = result.withExposedGit || [];
 
-            if (!options.functions.git) return;
+            if (!options.functions.git) {
+                sendResponse({status: false});
+                return;
+            }
 
             if (gitHeadContent.includes("ref:")) {
                 if (!exposed.some(e => e.url === gitUrl)) {
                     exposed.push({type: "git", url: new URL(pageUrl).hostname});
-                    chrome.storage.local.set({withExposedGit: exposed});
+                    await chrome.storage.local.set({withExposedGit: exposed});
                 }
 
-                chrome.notifications.create({
+                await chrome.notifications.create({
                     type: "basic",
                     iconUrl: "icons/dotgit-96.png",
-                    title: ".git esposto!",
-                    message: `Trovato su: ${new URL(pageUrl).hostname}`
+                    title: "Exposed .git found!",
+                    message: `Found at: ${new URL(pageUrl).hostname}`
                 });
             }
+            sendResponse({status: true});
         });
+        return true;
     }
 
-
-    // this will keep the message channel open to the other end until sendResponse is called
-    return true;
+    // For all other message types that don't require async response
+    return false;
 });
 
 
@@ -770,7 +791,25 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
 
     set_options(result.options);
 
-    chrome.webRequest.onHeadersReceived.addListener(details => processListener(details), {urls: ["<all_urls>"]});
+    // Add listener for completed requests
+    chrome.webRequest.onCompleted.addListener(
+        details => processListener(details),
+        {urls: ["<all_urls>"]}
+    );
+
+    // Add listener for error requests to catch failed attempts only if enabled
+    if (check_failed) {
+        chrome.webRequest.onErrorOccurred.addListener(
+            details => processListener(details),
+            {urls: ["<all_urls>"]}
+        );
+    }
+
+    // Keep the existing headers listener
+    chrome.webRequest.onHeadersReceived.addListener(
+        details => processListener(details),
+        {urls: ["<all_urls>"]}
+    );
 });
 
 // Reset download status at each start
@@ -778,6 +817,19 @@ chrome.storage.local.set({
     downloading: []
 });
 
+
+async function requestPermissions() {
+    try {
+        const granted = await browser.permissions.request({
+            origins: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"]
+        });
+        debugLog('Permission request result:', granted);
+        return granted;
+    } catch (error) {
+        debugLog('Error requesting permissions:', error);
+        return false;
+    }
+}
 
 async function processListener(details) {
     const origin = new URL(details.url).origin;
@@ -791,6 +843,22 @@ async function processListener(details) {
     }
 
     try {
+        // Verifica se abbiamo i permessi necessari
+        const hasPermissions = await browser.permissions.contains({
+            origins: [origin + "/*"]
+        });
+
+        if (!hasPermissions) {
+            debugLog('Missing permissions for:', origin);
+            // Chiedi i permessi all'utente
+            const granted = await requestPermissions();
+            if (!granted) {
+                debugLog('Permissions denied by user');
+                return;
+            }
+            debugLog('Permissions granted, proceeding with check');
+        }
+
         const result = await chrome.storage.local.get(["checked", "withExposedGit", "options"]);
         const options = result.options || DEFAULT_OPTIONS;
         const alreadyChecked = result.checked || [];
@@ -849,7 +917,7 @@ async function processListener(details) {
                     await new Promise(resolve => setTimeout(resolve, 100));
                 }
 
-                debugLog('Sending CHECK_SITE message');
+                debugLog('Sending CHECK_SITE message for origin:', origin);
                 const response = await new Promise((resolve, reject) => {
                     chrome.tabs.sendMessage(matchedTab.id, {
                         type: "CHECK_SITE",
@@ -956,13 +1024,13 @@ async function processListener(details) {
                     }
                 }
             } catch (error) {
-                console.error('[DotGit Background] Error:', error);
+                debugLog('Error:', error);
             }
         } else {
             debugLog('No matching tab found for:', origin);
         }
     } catch (error) {
-        console.error('[DotGit Background] Error in processListener:', error);
+        debugLog('Error in processListener:', error);
     } finally {
         // Rimuovi l'URL da quelli in elaborazione, anche in caso di errore
         processingUrls.delete(origin);
@@ -999,4 +1067,46 @@ function isValidUrl(string) {
     }
     return true;
 }
+
+
+async function checkPermissions() {
+    const permissionsToCheck = {
+        origins: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"]
+    };
+
+    try {
+        const hasPermissions = await browser.permissions.contains(permissionsToCheck);
+        if (!hasPermissions) {
+            debugLog('Missing required host permissions, requesting...');
+            return await requestPermissions();
+        }
+        return true;
+    } catch (err) {
+        debugLog('Error checking permissions:', err);
+        return false;
+    }
+}
+
+// Add listener for installation
+chrome.runtime.onInstalled.addListener(async (details) => {
+    if (details.reason === 'install' || details.reason === 'update') {
+        debugLog('Extension installed/updated');
+        
+        // Inizializza lo storage
+        await chrome.storage.local.set({
+            checked: [],
+            withExposedGit: [],
+            downloading: [],
+            options: DEFAULT_OPTIONS
+        });
+
+        // Mostra un messaggio di benvenuto
+        chrome.notifications.create({
+            type: "basic",
+            iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
+            title: "Welcome to DotGit!",
+            message: "Click the extension icon to get started. You'll need to grant permissions to check for exposed Git repositories."
+        });
+    }
+});
 

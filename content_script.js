@@ -71,7 +71,8 @@ if (typeof window.dotGitInjected === 'undefined') {
             });
             
             debugLog('Response status:', response.status);
-            debugLog('Response headers:', [...response.headers.entries()]);
+            debugLog('Response headers:', response.headers && response.headers.get ? 
+                    'Headers available' : 'Headers not available');
             
             if (response.status === 200) {
                 const text = await response.text();
@@ -292,6 +293,25 @@ if (typeof window.dotGitInjected === 'undefined') {
         return false;
     }
 
+    async function checkSite(url, options) {
+        try {
+            const results = await performChecks(url, options);
+            debugLog('Check results:', results);
+            return results;
+        } catch (error) {
+            debugLog('Error during checks:', error);
+            return {
+                git: false,
+                svn: false,
+                hg: false,
+                env: false,
+                ds_store: false,
+                opensource: false,
+                securitytxt: false
+            };
+        }
+    }
+
     // Listen for messages from the background script
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         debugLog('Received message:', request);
@@ -320,10 +340,10 @@ if (typeof window.dotGitInjected === 'undefined') {
                     securitytxt,
                     opensource
                 };
-                console.log('[DotGit] Check results:', results);
+                debugLog('Check results:', results);
                 sendResponse(results);
             }).catch(error => {
-                console.log('[DotGit] Error during checks:', error);
+                debugLog('Error during checks:', error);
                 sendResponse({
                     git: false,
                     svn: false,
