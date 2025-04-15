@@ -297,6 +297,12 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
 async function checkPermissions() {
     try {
+        // On Chrome, we have permissions by default from manifest
+        if (typeof browser === 'undefined') {
+            return true;
+        }
+
+        // Only check permissions on Firefox
         const hasPermissions = await browser.permissions.contains({
             origins: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"]
         });
@@ -309,12 +315,18 @@ async function checkPermissions() {
 
 async function requestPermissions() {
     try {
+        // On Chrome, we don't need to request permissions
+        if (typeof browser === 'undefined') {
+            return true;
+        }
+
+        // Only request permissions on Firefox
         const granted = await browser.permissions.request({
             origins: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"]
         });
         if (granted) {
             document.getElementById('permissions-banner').style.display = 'none';
-            // Ricarica il popup per mostrare i contenuti
+            // Reload popup to show contents
             window.location.reload();
         }
         return granted;
@@ -325,19 +337,24 @@ async function requestPermissions() {
 }
 
 document.addEventListener("DOMContentLoaded", async function () {
-    // Carica le opzioni per ottenere il valore di debug
+    // Load options to get debug value
     chrome.storage.local.get(["options"], function (result) {
         if (result.options && typeof result.options.debug !== "undefined") {
             debug = result.options.debug;
         }
     });
 
-    // Controlla i permessi all'apertura del popup
-    const hasPermissions = await checkPermissions();
-    if (!hasPermissions) {
-        document.getElementById('permissions-banner').style.display = 'block';
-        // Richiedi automaticamente i permessi
-        await requestPermissions();
+    // Only check permissions on Firefox
+    if (typeof browser !== 'undefined') {
+        const hasPermissions = await checkPermissions();
+        if (!hasPermissions) {
+            document.getElementById('permissions-banner').style.display = 'block';
+        } else {
+            document.getElementById('permissions-banner').style.display = 'none';
+        }
+    } else {
+        // On Chrome, hide the banner by default
+        document.getElementById('permissions-banner').style.display = 'none';
     }
 
     chrome.storage.local.get(["options"], function (options) {
