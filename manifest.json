@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "DotGit",
-  "version": "4.10.4",
+  "version": "5.0",
   "description": "An extension for checking if .git is exposed in visited websites",
   "icons": {
     "16": "icons/dotgit-16.png",
@@ -14,7 +14,9 @@
     "webRequest",
     "storage",
     "notifications",
-    "downloads"
+    "downloads",
+    "tabs",
+    "scripting"
   ],
   "host_permissions": [
     "http://*/*",
@@ -29,6 +31,28 @@
     "service_worker": "dotgit.js",
     "type": "module"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content_script.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "content_script.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
   "action": {
     "default_title": "DotGit",
     "default_popup": "popup/popup.html"

@@ -108,10 +108,8 @@ let check_hg;
 let check_env;
 let check_ds_store;
 let failed_in_a_row;
-let queue_listener = new Queue();
-let queue_req = new Queue();
-let queue_running = false;
 let blacklist = [];
+let processingUrls = new Set();
 
 
 function notification(title, message) {
@@ -567,16 +565,50 @@ function checkOptions(default_options, storage_options) {
 }
 
 
-chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
-    if (request.type === "download") {
+chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
+    console.log('[DotGit Background] Received message:', msg);
+    
+    if (msg.type === "GIT_FOUND") {
+        console.log('[DotGit Background] Git repository found at:', msg.url);
+        
+        chrome.storage.local.get(["withExposedGit"], function(result) {
+            const withExposedGit = result.withExposedGit || [];
+            
+            if (!withExposedGit.some(item => item.url === msg.url)) {
+                console.log('[DotGit Background] Adding new Git repository to list');
+                withExposedGit.push({
+                    type: "git",
+                    url: msg.url,
+                    open: false,
+                    securitytxt: false
+                });
+                
+                chrome.storage.local.set({ withExposedGit: withExposedGit }, function() {
+                    console.log('[DotGit Background] Storage updated');
+                    setBadge();
+                    
+                    chrome.notifications.create({
+                        type: "basic",
+                        iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
+                        title: ".git esposto!",
+                        message: `Repository Git esposto su: ${msg.url}`
+                    });
+                });
+            } else {
+                console.log('[DotGit Background] Git repository already in list');
+            }
+        });
+        return true;
+    } else if (msg.type === "download") {
+        console.log('[DotGit Background] Starting download for:', msg.url);
         notification("Download status", "Download started\nPlease wait...");
 
-        startDownload(request.url, function (fileExist, downloadStats) {
+        startDownload(msg.url, function (fileExist, downloadStats) {
             let strStatus = "";
 
             chrome.storage.local.get(["downloading"], function (downloading) {
                 if (typeof downloading.downloading !== "undefined" && downloading.downloading.length !== 0) {
-                    let index = downloading.downloading.indexOf(request.url);
+                    let index = downloading.downloading.indexOf(msg.url);
                     if (index > -1) {
                         downloading.downloading.splice(index, 1);
                     }
@@ -590,59 +622,109 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
                 strStatus += key + ": " + downloadStats[key] + "\n";
             });
             if (fileExist) {
-                notification("Download status", "Downloaded " + request.url + "\n" + strStatus);
+                notification("Download status", "Downloaded " + msg.url + "\n" + strStatus);
                 sendResponse({status: true});
             } else {
-                notification("Download status", "Failed to download " + request.url + "\nNo files found\n" + strStatus);
+                notification("Download status", "Failed to download " + msg.url + "\nNo files found\n" + strStatus);
                 sendResponse({status: false});
             }
         });
-    } else if (request.type === "git") {
-        check_git = request.value;
+    } else if (msg.type === "git") {
+        check_git = msg.value;
         sendResponse({status: true});
-    } else if (request.type === "svn") {
-        check_svn = request.value;
+    } else if (msg.type === "svn") {
+        check_svn = msg.value;
         sendResponse({status: true});
-    } else if (request.type === "hg") {
-        check_hg = request.value;
+    } else if (msg.type === "hg") {
+        check_hg = msg.value;
         sendResponse({status: true});
-    } else if (request.type === "env") {
-        check_env = request.value;
+    } else if (msg.type === "env") {
+        check_env = msg.value;
         sendResponse({status: true});
-    } else if (request.type === "ds_store") {
-        check_ds_store = request.value;
-    } else if (request.type === "notification_new_git") {
-        notification_new_git = request.value;
+    } else if (msg.type === "ds_store") {
+        check_ds_store = msg.value;
+    } else if (msg.type === "notification_new_git") {
+        notification_new_git = msg.value;
         sendResponse({status: true});
-    } else if (request.type === "notification_download") {
-        notification_download = request.value;
+    } else if (msg.type === "notification_download") {
+        notification_download = msg.value;
         sendResponse({status: true});
-    } else if (request.type === "check_opensource") {
-        check_opensource = request.value;
+    } else if (msg.type === "check_opensource") {
+        check_opensource = msg.value;
         sendResponse({status: true});
-    } else if (request.type === "check_securitytxt") {
-        check_securitytxt = request.value;
+    } else if (msg.type === "check_securitytxt") {
+        check_securitytxt = msg.value;
         sendResponse({status: true});
-    } else if (request.type === "blacklist") {
-        blacklist = request.value;
+    } else if (msg.type === "blacklist") {
+        blacklist = msg.value;
         sendResponse({status: true});
-    } else if (request.type === "max_connections") {
-        max_connections = request.value;
+    } else if (msg.type === "max_connections") {
+        max_connections = msg.value;
         sendResponse({status: true});
-    } else if (request.type === "wait") {
-        wait = request.value;
+    } else if (msg.type === "wait") {
+        wait = msg.value;
         sendResponse({status: true});
-    } else if (request.type === "max_wait") {
-        max_wait = request.value;
+    } else if (msg.type === "max_wait") {
+        max_wait = msg.value;
         sendResponse({status: true});
-    } else if (request.type === "failed_in_a_row") {
-        failed_in_a_row = request.value;
+    } else if (msg.type === "failed_in_a_row") {
+        failed_in_a_row = msg.value;
         sendResponse({status: true});
-    } else if (request.type === "reset_options") {
+    } else if (msg.type === "reset_options") {
         chrome.storage.local.set({options: DEFAULT_OPTIONS});
         set_options(DEFAULT_OPTIONS);
         sendResponse({status: true, options: DEFAULT_OPTIONS});
+    } else if (msg.type === "REQUEST_GIT_CHECK") {
+        const {origin, pageUrl} = msg;
+
+        chrome.storage.local.get(["options", "checked"], (result) => {
+            const options = result.options || DEFAULT_OPTIONS;
+            const alreadyChecked = result.checked || [];
+
+            const isEnabled = options.functions.git;
+            const alreadyDone = alreadyChecked.includes(origin);
+
+            console.log("Already checked: ", alreadyChecked);
+            console.log("Is enabled: ", isEnabled);
+
+            if (!isEnabled || alreadyDone) {
+                return sendResponse({shouldFetch: false});
+            }
+
+            // Puoi anche aggiornare checked subito qui
+            alreadyChecked.push(origin);
+            chrome.storage.local.set({checked: alreadyChecked});
+
+            sendResponse({shouldFetch: true});
+        });
+
+        // Necessario per risposte asincrone
+        return true;
+    } else if (msg.type === "GIT_FETCH_RESULT") {
+        const {gitUrl, gitHeadContent, pageUrl} = msg;
+
+        chrome.storage.local.get(["options", "withExposedGit"], (result) => {
+            const options = result.options || DEFAULT_OPTIONS;
+            const exposed = result.withExposedGit || [];
+
+            if (!options.functions.git) return;
+
+            if (gitHeadContent.includes("ref:")) {
+                if (!exposed.some(e => e.url === gitUrl)) {
+                    exposed.push({type: "git", url: new URL(pageUrl).hostname});
+                    chrome.storage.local.set({withExposedGit: exposed});
+                }
+
+                chrome.notifications.create({
+                    type: "basic",
+                    iconUrl: "icons/dotgit-96.png",
+                    title: ".git esposto!",
+                    message: `Trovato su: ${new URL(pageUrl).hostname}`
+                });
+            }
+        });
     }
+
 
     // this will keep the message channel open to the other end until sendResponse is called
     return true;
@@ -686,137 +768,193 @@ chrome.storage.local.set({
 });
 
 
-function processListener(details) {
-    let origin = new URL(details["url"])["origin"];
-    if (queue_req.isEmpty() === true) {
-        chrome.storage.local.get(["checked", "withExposedGit"], result => processSearch(result, origin));
-    } else {
-        queue_listener.enqueue(origin);
+async function processListener(details) {
+    const origin = new URL(details.url).origin;
+    console.log('[DotGit Background] Processing request for:', details.url);
+    console.log('[DotGit Background] Origin:', origin);
+
+    // Controllo preventivo per URL già in elaborazione
+    if (processingUrls.has(origin)) {
+        console.log('[DotGit Background] URL already being processed, skipping:', origin);
+        return;
     }
-}
 
+    try {
+        const result = await chrome.storage.local.get(["checked", "withExposedGit", "options"]);
+        const options = result.options || DEFAULT_OPTIONS;
+        const alreadyChecked = result.checked || [];
+        console.log('[DotGit Background] Already checked URLs:', alreadyChecked);
 
-function checkUrl(storage, origin) {
-    let hostname = new URL(origin)["hostname"];
+        // Skip if already checked or in blacklist
+        if (alreadyChecked.includes(origin) || checkBlacklist(new URL(origin).hostname)) {
+            console.log('[DotGit Background] URL already checked or in blacklist, skipping:', origin);
+            return;
+        }
 
-    if (origin.startsWith("chrome-extension")) {
-        return false;
-    }
-    return (storage.checked.includes(origin) === false && checkBlacklist(hostname) === false);
-}
+        // Aggiungi l'URL a quelli in elaborazione
+        processingUrls.add(origin);
 
+        // Mark as checked immediately to prevent duplicate checks
+        alreadyChecked.push(origin);
+        await chrome.storage.local.set({checked: alreadyChecked});
 
-async function processSearch(storage, origin) {
-    if (checkUrl(storage, origin)) {
-        if (queue_running === false) {
-            queue_running = true;
-            queue_req.enqueue(origin);
-            while (queue_listener.isEmpty() === false) {
-                let origin2 = queue_listener.dequeue();
-                if (checkUrl(storage, origin2)) {
-                    queue_req.enqueue(origin2);
-                }
+        // Send message to content script to perform checks
+        const tabs = await chrome.tabs.query({});
+        console.log('[DotGit Background] Found tabs:', tabs.length);
+        
+        const matchedTab = tabs.find((tab) => {
+            try {
+                const url = new URL(tab.url);
+                return url.origin === origin;
+            } catch (e) {
+                return false;
             }
-            await precessQueue(storage);
-            queue_running = false;
-        } else {
-            queue_listener.enqueue(origin);
-        }
-    }
-}
+        });
 
-
-function Queue() {
-    let collection = [];
-    this.print = function () {
-        console.log(collection);
-    };
-    this.enqueue = function (element) {
-        // works for strings not objects
-        if (collection.indexOf(element) === -1) {
-            collection.push(element);
-        }
-    };
-    this.dequeue = function () {
-        return collection.shift();
-    };
-    this.front = function () {
-        return collection[0];
-    };
-    this.size = function () {
-        return collection.length;
-    };
-    this.isEmpty = function () {
-        return (collection.length === 0);
-    };
-}
-
-
-async function precessQueue(visitedSite) {
-    while (queue_req.isEmpty() !== true) {
-        let url = queue_req.front();
-        let securitytxt = null;
-        // replace ws and wss with http and https
-        url = url.replace(WS_SEARCH, WS_REPLACE);
-
-        if (check_git) {
-            if (await checkGit(url) !== false) {
-                let open = false;
-                if (check_opensource) {
-                    open = await isOpenSource(url);
-                }
-                if (check_securitytxt) {
-                    securitytxt = await checkSecuritytxt(url);
-                }
-
-                visitedSite.withExposedGit.push({
-                    type: "git",
-                    url: url,
-                    open: open,
-                    securitytxt: securitytxt
+        if (matchedTab) {
+            console.log('[DotGit Background] Found matching tab:', matchedTab.url);
+            try {
+                // First check if content script is available
+                const isContentScriptAvailable = await new Promise((resolve) => {
+                    chrome.tabs.sendMessage(matchedTab.id, { type: "PING" }, response => {
+                        if (chrome.runtime.lastError) {
+                            console.log('[DotGit Background] Content script not available');
+                            resolve(false);
+                        } else {
+                            console.log('[DotGit Background] Content script responded to ping');
+                            resolve(true);
+                        }
+                    });
                 });
-                chrome.storage.local.set(visitedSite);
-            }
-        }
-        if (check_svn) {
-            if (await checkSvn(url) !== false) {
-                if (check_securitytxt && securitytxt === null) {
-                    securitytxt = await checkSecuritytxt(url);
+
+                // If content script is not available, inject it
+                if (!isContentScriptAvailable) {
+                    console.log('[DotGit Background] Injecting content script');
+                    await chrome.scripting.executeScript({
+                        target: { tabId: matchedTab.id },
+                        files: ['content_script.js']
+                    });
+                    // Wait a bit for the script to initialize
+                    await new Promise(resolve => setTimeout(resolve, 100));
                 }
-                visitedSite.withExposedGit.push({type: "svn", url: url, securitytxt: securitytxt});
-                chrome.storage.local.set(visitedSite);
-            }
-        }
-        if (check_hg) {
-            if (await checkHg(url) !== false) {
-                if (check_securitytxt && securitytxt === null) {
-                    securitytxt = await checkSecuritytxt(url);
+
+                console.log('[DotGit Background] Sending CHECK_SITE message');
+                const response = await new Promise((resolve, reject) => {
+                    chrome.tabs.sendMessage(matchedTab.id, {
+                        type: "CHECK_SITE",
+                        url: origin,
+                        options: options
+                    }, response => {
+                        if (chrome.runtime.lastError) {
+                            reject(chrome.runtime.lastError);
+                        } else {
+                            console.log('[DotGit Background] Received check results:', response);
+                            resolve(response);
+                        }
+                    });
+                });
+
+                if (response) {
+                    // Get fresh copy of withExposedGit to avoid race conditions
+                    const currentStorage = await chrome.storage.local.get(["withExposedGit"]);
+                    const withExposedGit = currentStorage.withExposedGit || [];
+
+                    // Process results and update storage
+                    if (response.git) {
+                        console.log('[DotGit Background] Git repository found at:', origin);
+                        // Check if this URL is already in the list
+                        if (!withExposedGit.some(item => item.url === origin && item.type === "git")) {
+                            withExposedGit.push({
+                                type: "git",
+                                url: origin,
+                                open: response.opensource || false,
+                                securitytxt: response.securitytxt
+                            });
+                            chrome.notifications.create({
+                                type: "basic",
+                                iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
+                                title: "Found an exposed .git",
+                                message: `${origin}/.git/`
+                            });
+                        }
+                    }
+                    if (response.svn) {
+                        if (!withExposedGit.some(item => item.url === origin && item.type === "svn")) {
+                            withExposedGit.push({
+                                type: "svn",
+                                url: origin,
+                                securitytxt: response.securitytxt
+                            });
+                            chrome.notifications.create({
+                                type: "basic",
+                                iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
+                                title: "Found an exposed .svn",
+                                message: `${origin}/.svn/`
+                            });
+                        }
+                    }
+                    if (response.hg) {
+                        if (!withExposedGit.some(item => item.url === origin && item.type === "hg")) {
+                            withExposedGit.push({
+                                type: "hg",
+                                url: origin,
+                                securitytxt: response.securitytxt
+                            });
+                            chrome.notifications.create({
+                                type: "basic",
+                                iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
+                                title: "Found an exposed .hg",
+                                message: `${origin}/.hg/`
+                            });
+                        }
+                    }
+                    if (response.env) {
+                        if (!withExposedGit.some(item => item.url === origin && item.type === "env")) {
+                            withExposedGit.push({
+                                type: "env",
+                                url: origin,
+                                securitytxt: response.securitytxt
+                            });
+                            chrome.notifications.create({
+                                type: "basic",
+                                iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
+                                title: "Found an exposed .env",
+                                message: `${origin}/.env`
+                            });
+                        }
+                    }
+                    if (response.ds_store) {
+                        if (!withExposedGit.some(item => item.url === origin && item.type === "ds_store")) {
+                            withExposedGit.push({
+                                type: "ds_store",
+                                url: origin,
+                                securitytxt: response.securitytxt
+                            });
+                            chrome.notifications.create({
+                                type: "basic",
+                                iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
+                                title: "Found an exposed .DS_Store",
+                                message: `${origin}/.DS_Store`
+                            });
+                        }
+                    }
+
+                    if (withExposedGit.length !== currentStorage.withExposedGit.length) {
+                        await chrome.storage.local.set({withExposedGit});
+                        setBadge();
+                    }
                 }
-                visitedSite.withExposedGit.push({type: "hg", url: url, securitytxt: securitytxt});
-                chrome.storage.local.set(visitedSite);
+            } catch (error) {
+                console.error('[DotGit Background] Error:', error);
             }
+        } else {
+            console.log('[DotGit Background] No matching tab found for:', origin);
         }
-        if (check_env) {
-            if (await checkEnv(url) !== false) {
-                if (check_securitytxt && securitytxt === null) {
-                    securitytxt = await checkSecuritytxt(url);
-                }
-                visitedSite.withExposedGit.push({type: "env", url: url, securitytxt: securitytxt});
-                chrome.storage.local.set(visitedSite);
-            }
-        }
-        if (check_ds_store) {
-            if (await checkDSStore(url) !== false) {
-                if (check_securitytxt && securitytxt === null) {
-                    securitytxt = await checkSecuritytxt(url);
-                }
-                visitedSite.withExposedGit.push({type: "ds_store", url: url, securitytxt: securitytxt});
-                chrome.storage.local.set(visitedSite);
-            }
-        }
-        visitedSite.checked.push(url);
-        chrome.storage.local.set(visitedSite);
-        queue_req.dequeue();
+    } catch (error) {
+        console.error('[DotGit Background] Error in processListener:', error);
+    } finally {
+        // Rimuovi l'URL da quelli in elaborazione, anche in caso di errore
+        processingUrls.delete(origin);
     }
 }
 
@@ -842,37 +980,6 @@ function escapeRegExp(string) {
 }
 
 
-async function isOpenSource(url) {
-    let configUrl;
-    let str = "";
-
-    configUrl = await checkGitConfig(url);
-
-    if (configUrl !== false) {
-        str = configUrl.replace("github.com:", "github.com/");
-        str = str.replace("gitlab.com:", "gitlab.com/");
-        if (str.startsWith("ssh://")) {
-            str = str.substring(6);
-        }
-        if (str.startsWith("git@")) {
-            str = str.substring(4);
-        }
-        if (str.endsWith(".git")) {
-            str = str.substring(0, str.length - 4);
-        }
-        if (str.startsWith("http") === false) {
-            str = "https://" + str;
-        }
-        //console.log(str);
-
-        if (isValidUrl(str)) {
-            return await checkOpenSource(str);
-        }
-    }
-
-    return false;
-}
-
 function isValidUrl(string) {
     try {
         new URL(string);
@@ -882,71 +989,3 @@ function isValidUrl(string) {
     return true;
 }
 
-async function checkGitConfig(url) {
-    const to_check = url + GIT_CONFIG_PATH;
-    const search = new RegExp(GIT_CONFIG_SEARCH);
-    let result = [];
-
-    try {
-        const response = await fetchWithTimeout(to_check, {
-            redirect: "manual",
-            timeout: 10000
-        });
-
-        if (response.status === 200) {
-            let text = await response.text();
-            if (text !== false && ((result = search.exec(text)) !== null)) {
-                return result[1];
-            }
-        }
-    } catch (error) {
-        // Timeouts if the request takes longer than X seconds
-        //console.log(error.name);
-    }
-
-    return false;
-}
-
-async function checkOpenSource(url) {
-    try {
-        const response = await fetchWithTimeout(url, {
-            redirect: "manual",
-            timeout: 10000
-        });
-
-        if (response.status === 200) {
-            return url;
-        }
-    } catch (error) {
-        // Timeouts if the request takes longer than X seconds
-        //console.log(error.name);
-    }
-
-    return false;
-}
-
-
-async function checkSecuritytxt(url) {
-    for (const element of SECURITYTXT_PATHS) {
-        const to_check = url + element;
-        const search = new RegExp(SECURITYTXT_SEARCH);
-
-        try {
-            const response = await fetchWithTimeout(to_check, {
-                redirect: "manual",
-                timeout: 10000
-            });
-
-            if (response.status === 200) {
-                let text = await response.text();
-                if (text !== false && ((search.exec(text)) !== null)) {
-                    return to_check;
-                }
-            }
-        } catch (error) {
-            // Timeouts if the request takes longer than X seconds
-            //console.log(error.name);
-        }
-    }
-    return false;
-}
