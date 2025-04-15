@@ -295,9 +295,60 @@ if (typeof window.dotGitInjected === 'undefined') {
 
     async function checkSite(url, options) {
         try {
-            const results = await performChecks(url, options);
-            debugLog('Check results:', results);
-            return results;
+            debugLog('Starting site check for:', url);
+            
+            // Run all checks in parallel
+            const [git, svn, hg, env, ds_store, securitytxt, opensource] = await Promise.all([
+                options.functions.git ? checkGit(url) : Promise.resolve(false),
+                options.functions.svn ? checkSvn(url) : Promise.resolve(false),
+                options.functions.hg ? checkHg(url) : Promise.resolve(false),
+                options.functions.env ? checkEnv(url) : Promise.resolve(false),
+                options.functions.ds_store ? checkDSStore(url) : Promise.resolve(false),
+                options.check_securitytxt ? checkSecuritytxt(url) : Promise.resolve(false),
+                options.functions.git && options.check_opensource ? isOpenSource(url) : Promise.resolve(false)
+            ]);
+
+            debugLog('Check results:', { git, svn, hg, env, ds_store, securitytxt, opensource });
+
+            const types = [];
+            if (git) types.push('git');
+            if (svn) types.push('svn');
+            if (hg) types.push('hg');
+            if (env) types.push('env');
+            if (ds_store) types.push('ds_store');
+
+            debugLog('Found types:', types);
+
+            if (types.length > 0) {
+                // Send each finding individually to ensure proper processing
+                for (const type of types) {
+                    debugLog('Sending finding for type:', type);
+                    await new Promise((resolve) => {
+                        chrome.runtime.sendMessage({
+                            type: "FINDINGS_FOUND",
+                            data: {
+                                url: url,
+                                types: [type], // Send only one type at a time
+                                opensource: opensource,
+                                securitytxt: securitytxt
+                            }
+                        }, response => {
+                            debugLog('Background response for', type, ':', response);
+                            resolve();
+                        });
+                    });
+                }
+            }
+
+            return {
+                git,
+                svn,
+                hg,
+                env,
+                ds_store,
+                securitytxt,
+                opensource
+            };
         } catch (error) {
             debugLog('Error during checks:', error);
             return {
@@ -306,8 +357,9 @@ if (typeof window.dotGitInjected === 'undefined') {
                 hg: false,
                 env: false,
                 ds_store: false,
+                securitytxt: false,
                 opensource: false,
-                securitytxt: false
+                error: error.message
             };
         }
     }
@@ -318,29 +370,11 @@ if (typeof window.dotGitInjected === 'undefined') {
         
         if (request.type === "CHECK_SITE") {
             const { url, options } = request;
-            debug = options.debug;  // Imposta il debug in base alle opzioni
+            debug = options.debug;
             debugLog('Checking site:', url, 'with options:', options);
             
             // Run checks based on enabled options
-            Promise.all([
-                options.functions.git ? checkGit(url) : Promise.resolve(false),
-                options.functions.svn ? checkSvn(url) : Promise.resolve(false),
-                options.functions.hg ? checkHg(url) : Promise.resolve(false),
-                options.functions.env ? checkEnv(url) : Promise.resolve(false),
-                options.functions.ds_store ? checkDSStore(url) : Promise.resolve(false),
-                options.check_securitytxt ? checkSecuritytxt(url) : Promise.resolve(false),
-                options.functions.git && options.check_opensource ? isOpenSource(url) : Promise.resolve(false)
-            ]).then(([git, svn, hg, env, ds_store, securitytxt, opensource]) => {
-                const results = {
-                    git,
-                    svn,
-                    hg,
-                    env,
-                    ds_store,
-                    securitytxt,
-                    opensource
-                };
-                debugLog('Check results:', results);
+            checkSite(url, options).then((results) => {
                 sendResponse(results);
             }).catch(error => {
                 debugLog('Error during checks:', error);
@@ -355,7 +389,7 @@ if (typeof window.dotGitInjected === 'undefined') {
                     error: error.message
                 });
             });
-
+            
             return true; // Keep the message channel open for async response
         }
     });
