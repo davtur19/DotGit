@@ -17,6 +17,7 @@ const DEFAULT_OPTIONS = {
     },
     "check_opensource": true,
     "check_securitytxt": true,
+    "debug": false,
     "download": {
         "wait": 100,
         "max_wait": 10000,
@@ -110,7 +111,13 @@ let check_ds_store;
 let failed_in_a_row;
 let blacklist = [];
 let processingUrls = new Set();
+let debug;
 
+function debugLog(...args) {
+    if (debug) {
+        console.log('[DotGit Debug]', ...args);
+    }
+}
 
 function notification(title, message) {
     if (title === "Download status") {
@@ -549,6 +556,7 @@ function set_options(options) {
     check_hg = options.functions.hg;
     check_env = options.functions.env;
     check_ds_store = options.functions.ds_store;
+    debug = options.debug;
     blacklist = options.blacklist;
 }
 
@@ -566,16 +574,16 @@ function checkOptions(default_options, storage_options) {
 
 
 chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
-    console.log('[DotGit Background] Received message:', msg);
+    debugLog('Received message:', msg);
     
     if (msg.type === "GIT_FOUND") {
-        console.log('[DotGit Background] Git repository found at:', msg.url);
+        debugLog('Git repository found at:', msg.url);
         
         chrome.storage.local.get(["withExposedGit"], function(result) {
             const withExposedGit = result.withExposedGit || [];
             
             if (!withExposedGit.some(item => item.url === msg.url)) {
-                console.log('[DotGit Background] Adding new Git repository to list');
+                debugLog('Adding new Git repository to list');
                 withExposedGit.push({
                     type: "git",
                     url: msg.url,
@@ -584,7 +592,7 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
                 });
                 
                 chrome.storage.local.set({ withExposedGit: withExposedGit }, function() {
-                    console.log('[DotGit Background] Storage updated');
+                    debugLog('Storage updated');
                     setBadge();
                     
                     chrome.notifications.create({
@@ -595,12 +603,12 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
                     });
                 });
             } else {
-                console.log('[DotGit Background] Git repository already in list');
+                debugLog('Git repository already in list');
             }
         });
         return true;
     } else if (msg.type === "download") {
-        console.log('[DotGit Background] Starting download for:', msg.url);
+        debugLog('Starting download for:', msg.url);
         notification("Download status", "Download started\nPlease wait...");
 
         startDownload(msg.url, function (fileExist, downloadStats) {
@@ -655,6 +663,9 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
     } else if (msg.type === "check_securitytxt") {
         check_securitytxt = msg.value;
         sendResponse({status: true});
+    } else if (msg.type === "debug") {
+        debug = msg.value;
+        sendResponse({status: true});
     } else if (msg.type === "blacklist") {
         blacklist = msg.value;
         sendResponse({status: true});
@@ -684,8 +695,8 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
             const isEnabled = options.functions.git;
             const alreadyDone = alreadyChecked.includes(origin);
 
-            console.log("Already checked: ", alreadyChecked);
-            console.log("Is enabled: ", isEnabled);
+            debugLog("Already checked: ", alreadyChecked);
+            debugLog("Is enabled: ", isEnabled);
 
             if (!isEnabled || alreadyDone) {
                 return sendResponse({shouldFetch: false});
@@ -770,12 +781,12 @@ chrome.storage.local.set({
 
 async function processListener(details) {
     const origin = new URL(details.url).origin;
-    console.log('[DotGit Background] Processing request for:', details.url);
-    console.log('[DotGit Background] Origin:', origin);
+    debugLog('Processing request for:', details.url);
+    debugLog('Origin:', origin);
 
     // Controllo preventivo per URL già in elaborazione
     if (processingUrls.has(origin)) {
-        console.log('[DotGit Background] URL already being processed, skipping:', origin);
+        debugLog('URL already being processed, skipping:', origin);
         return;
     }
 
@@ -783,11 +794,11 @@ async function processListener(details) {
         const result = await chrome.storage.local.get(["checked", "withExposedGit", "options"]);
         const options = result.options || DEFAULT_OPTIONS;
         const alreadyChecked = result.checked || [];
-        console.log('[DotGit Background] Already checked URLs:', alreadyChecked);
+        debugLog('Already checked URLs:', alreadyChecked);
 
         // Skip if already checked or in blacklist
         if (alreadyChecked.includes(origin) || checkBlacklist(new URL(origin).hostname)) {
-            console.log('[DotGit Background] URL already checked or in blacklist, skipping:', origin);
+            debugLog('URL already checked or in blacklist, skipping:', origin);
             return;
         }
 
@@ -800,7 +811,7 @@ async function processListener(details) {
 
         // Send message to content script to perform checks
         const tabs = await chrome.tabs.query({});
-        console.log('[DotGit Background] Found tabs:', tabs.length);
+        debugLog('Found tabs:', tabs.length);
         
         const matchedTab = tabs.find((tab) => {
             try {
@@ -812,16 +823,16 @@ async function processListener(details) {
         });
 
         if (matchedTab) {
-            console.log('[DotGit Background] Found matching tab:', matchedTab.url);
+            debugLog('Found matching tab:', matchedTab.url);
             try {
                 // First check if content script is available
                 const isContentScriptAvailable = await new Promise((resolve) => {
                     chrome.tabs.sendMessage(matchedTab.id, { type: "PING" }, response => {
                         if (chrome.runtime.lastError) {
-                            console.log('[DotGit Background] Content script not available');
+                            debugLog('Content script not available');
                             resolve(false);
                         } else {
-                            console.log('[DotGit Background] Content script responded to ping');
+                            debugLog('Content script responded to ping');
                             resolve(true);
                         }
                     });
@@ -829,7 +840,7 @@ async function processListener(details) {
 
                 // If content script is not available, inject it
                 if (!isContentScriptAvailable) {
-                    console.log('[DotGit Background] Injecting content script');
+                    debugLog('Injecting content script');
                     await chrome.scripting.executeScript({
                         target: { tabId: matchedTab.id },
                         files: ['content_script.js']
@@ -838,7 +849,7 @@ async function processListener(details) {
                     await new Promise(resolve => setTimeout(resolve, 100));
                 }
 
-                console.log('[DotGit Background] Sending CHECK_SITE message');
+                debugLog('Sending CHECK_SITE message');
                 const response = await new Promise((resolve, reject) => {
                     chrome.tabs.sendMessage(matchedTab.id, {
                         type: "CHECK_SITE",
@@ -848,7 +859,7 @@ async function processListener(details) {
                         if (chrome.runtime.lastError) {
                             reject(chrome.runtime.lastError);
                         } else {
-                            console.log('[DotGit Background] Received check results:', response);
+                            debugLog('Received check results:', response);
                             resolve(response);
                         }
                     });
@@ -861,7 +872,7 @@ async function processListener(details) {
 
                     // Process results and update storage
                     if (response.git) {
-                        console.log('[DotGit Background] Git repository found at:', origin);
+                        debugLog('Git repository found at:', origin);
                         // Check if this URL is already in the list
                         if (!withExposedGit.some(item => item.url === origin && item.type === "git")) {
                             withExposedGit.push({
@@ -948,7 +959,7 @@ async function processListener(details) {
                 console.error('[DotGit Background] Error:', error);
             }
         } else {
-            console.log('[DotGit Background] No matching tab found for:', origin);
+            debugLog('No matching tab found for:', origin);
         }
     } catch (error) {
         console.error('[DotGit Background] Error in processListener:', error);

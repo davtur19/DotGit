@@ -1,6 +1,13 @@
 if (typeof window.dotGitInjected === 'undefined') {
     window.dotGitInjected = true;
-    console.log('[DotGit] Content script loaded');
+
+    let debug = false;
+
+    function debugLog(...args) {
+        if (debug) {
+            console.log('[DotGit]', ...args);
+        }
+    }
 
     // Content script for checking exposed Git repositories and sensitive files
     const GIT_PATH = "/.git/";
@@ -57,40 +64,39 @@ if (typeof window.dotGitInjected === 'undefined') {
         const search = new RegExp(GIT_OBJECTS_SEARCH, "y");
         
         try {
-            console.log('[DotGit] Checking Git HEAD:', to_check);
+            debugLog('Checking Git HEAD:', to_check);
             const response = await fetchWithTimeout(to_check, {
                 redirect: "manual",
                 timeout: 10000
             });
             
-            console.log('[DotGit] Response status:', response.status);
-            console.log('[DotGit] Response headers:', [...response.headers.entries()]);
+            debugLog('Response status:', response.status);
+            debugLog('Response headers:', [...response.headers.entries()]);
             
             if (response.status === 200) {
                 const text = await response.text();
-                console.log('[DotGit] Git HEAD content:', text);
-                console.log('[DotGit] Content length:', text.length);
-                console.log('[DotGit] Starts with header?', text.startsWith(GIT_HEAD_HEADER));
-                console.log('[DotGit] Matches hash?', search.test(text));
+                debugLog('Git HEAD content:', text);
+                debugLog('Content length:', text.length);
+                debugLog('Starts with header?', text.startsWith(GIT_HEAD_HEADER));
+                debugLog('Matches hash?', search.test(text));
                 
                 if (text.startsWith(GIT_HEAD_HEADER) || search.test(text)) {
-                    console.log('[DotGit] Git repository found!');
-                    // Invia immediatamente il messaggio al background script
+                    debugLog('Git repository found!');
                     chrome.runtime.sendMessage({
                         type: "GIT_FOUND",
                         url: url
                     });
                     return true;
                 }
-                console.log('[DotGit] Content does not match Git patterns');
+                debugLog('Content does not match Git patterns');
             } else {
-                console.log('[DotGit] Response not OK:', response.status, response.statusText);
+                debugLog('Response not OK:', response.status, response.statusText);
             }
         } catch (error) {
-            console.log('[DotGit] Error checking Git:', error);
+            debugLog('Error checking Git:', error);
         }
         
-        console.log('[DotGit] No Git repository found at:', to_check);
+        debugLog('No Git repository found at:', to_check);
         return false;
     }
 
@@ -288,11 +294,12 @@ if (typeof window.dotGitInjected === 'undefined') {
 
     // Listen for messages from the background script
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-        console.log('[DotGit] Received message:', request);
+        debugLog('Received message:', request);
         
         if (request.type === "CHECK_SITE") {
             const { url, options } = request;
-            console.log('[DotGit] Checking site:', url, 'with options:', options);
+            debug = options.debug;  // Imposta il debug in base alle opzioni
+            debugLog('Checking site:', url, 'with options:', options);
             
             // Run checks based on enabled options
             Promise.all([
@@ -333,5 +340,5 @@ if (typeof window.dotGitInjected === 'undefined') {
         }
     });
 
-    console.log('[DotGit] Content script setup complete');
+    debugLog('Content script setup complete');
 } 
