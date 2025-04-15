@@ -582,6 +582,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const data = msg.data;
                 const origin = data.url;
                 let updatedList = false;
+                let newFindings = [];
 
                 for (const type of data.types) {
                     const findingUrl = origin + (
@@ -603,19 +604,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                             foundAt: findingUrl
                         });
                         updatedList = true;
-
-                        chrome.notifications.create({
-                            type: "basic",
-                            iconUrl: chrome.runtime.getURL(EXTENSION_ICON["48"]),
-                            title: `Exposed ${type} found!`,
-                            message: `Found at: ${findingUrl}`
-                        });
+                        newFindings.push({type, findingUrl});
                     }
                 }
 
                 if (updatedList) {
                     await chrome.storage.local.set({withExposedGit});
                     await setBadge();
+
+                    // Show a single notification with all findings
+                    if (newFindings.length > 0) {
+                        const title = newFindings.length === 1
+                                      ? `Exposed ${newFindings[0].type} found!`
+                                      : 'Multiple exposures found!';
+
+                        const message = newFindings.length === 1
+                                        ? `Found at: ${newFindings[0].findingUrl}`
+                                        : newFindings.map(f => `${f.type}: ${f.findingUrl}`).join('\n');
+
+                        chrome.notifications.create({
+                            type: "basic",
+                            iconUrl: chrome.runtime.getURL(EXTENSION_ICON["48"]),
+                            title: title,
+                            message: message
+                        });
+                    }
                 }
 
                 sendResponse({status: true});
@@ -643,8 +656,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
             notification("Download status",
                 fileExist
-                    ? `Downloaded ${msg.url}\n${strStatus}`
-                    : `Failed to download ${msg.url}\nNo files found\n${strStatus}`
+                ? `Downloaded ${msg.url}\n${strStatus}`
+                : `Failed to download ${msg.url}\nNo files found\n${strStatus}`
             );
             sendResponse({status: fileExist});
         });
@@ -901,7 +914,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
             options: DEFAULT_OPTIONS
         });
 
-        const hasPermissions = await browser.permissions.contains({
+        const hasPermissions = await chrome.permissions.contains({
             origins: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"]
         });
 
