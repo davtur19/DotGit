@@ -30,6 +30,11 @@ const DEFAULT_OPTIONS = {
     ]
 };
 
+const EXTENSION_ICON = {
+    "48": "icons/dotgit-48.png",
+    "96": "icons/dotgit-96.png"
+};
+
 const WS_SEARCH = /(ws)(s)?:\/\//;
 const WS_REPLACE = "http$2://";
 
@@ -134,7 +139,7 @@ function notification(title, message) {
 
     chrome.notifications.create({
         type: "basic",
-        iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
+        iconUrl: chrome.runtime.getURL(EXTENSION_ICON["48"]),
         title: title,
         message: message
     });
@@ -601,7 +606,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                         
                         await chrome.notifications.create({
                             type: "basic",
-                            iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
+                            iconUrl: chrome.runtime.getURL(EXTENSION_ICON["48"]),
                             title: `Exposed ${type} found!`,
                             message: `Found at: ${findingUrl}`
                         });
@@ -908,7 +913,6 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     if (details.reason === 'install' || details.reason === 'update') {
         debugLog('Extension installed/updated');
         
-        // Inizializza lo storage
         await chrome.storage.local.set({
             checked: [],
             withExposedGit: [],
@@ -916,10 +920,9 @@ chrome.runtime.onInstalled.addListener(async (details) => {
             options: DEFAULT_OPTIONS
         });
 
-        // Mostra un messaggio di benvenuto
         chrome.notifications.create({
             type: "basic",
-            iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
+            iconUrl: chrome.runtime.getURL(EXTENSION_ICON["48"]),
             title: "Welcome to DotGit!",
             message: "Click the extension icon to get started. You'll need to grant permissions to check for exposed Git repositories."
         });
