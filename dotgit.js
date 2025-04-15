@@ -836,6 +836,12 @@ async function processListener(details) {
     debugLog('Processing request for:', details.url);
     debugLog('Origin:', origin);
 
+    // Skip failed requests if check_failed is disabled
+    if (!check_failed && (details.error || details.statusCode >= 400)) {
+        debugLog('Skipping failed request because check_failed is disabled');
+        return;
+    }
+
     // Controllo preventivo per URL già in elaborazione
     if (processingUrls.has(origin)) {
         debugLog('URL already being processed, skipping:', origin);
@@ -952,7 +958,7 @@ async function processListener(details) {
                             chrome.notifications.create({
                                 type: "basic",
                                 iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
-                                title: "Found an exposed .git",
+                                title: "Exposed .git found!",
                                 message: `${origin}/.git/`
                             });
                         }
@@ -967,7 +973,7 @@ async function processListener(details) {
                             chrome.notifications.create({
                                 type: "basic",
                                 iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
-                                title: "Found an exposed .svn",
+                                title: "Exposed .svn found!",
                                 message: `${origin}/.svn/`
                             });
                         }
@@ -982,7 +988,7 @@ async function processListener(details) {
                             chrome.notifications.create({
                                 type: "basic",
                                 iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
-                                title: "Found an exposed .hg",
+                                title: "Exposed .hg found!",
                                 message: `${origin}/.hg/`
                             });
                         }
@@ -997,7 +1003,7 @@ async function processListener(details) {
                             chrome.notifications.create({
                                 type: "basic",
                                 iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
-                                title: "Found an exposed .env",
+                                title: "Exposed .env found!",
                                 message: `${origin}/.env`
                             });
                         }
@@ -1012,7 +1018,7 @@ async function processListener(details) {
                             chrome.notifications.create({
                                 type: "basic",
                                 iconUrl: chrome.runtime.getURL("icons/dotgit-48.png"),
-                                title: "Found an exposed .DS_Store",
+                                title: "Exposed .DS_Store found!",
                                 message: `${origin}/.DS_Store`
                             });
                         }
