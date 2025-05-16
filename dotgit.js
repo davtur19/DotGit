@@ -18,7 +18,7 @@ const DEFAULT_OPTIONS = {
     "check_opensource": true,
     "check_securitytxt": true,
     "debug": false,
-    "check_failed": false,
+    "check_failed": true,
     "download": {
         "wait": 100,
         "max_wait": 10000,
