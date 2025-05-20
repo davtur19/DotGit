@@ -834,36 +834,46 @@ async function processListener(details) {
         alreadyChecked.push(origin);
         await chrome.storage.local.set({checked: alreadyChecked});
 
-        const tabs = await chrome.tabs.query({});
-        const matchedTab = tabs.find(tab => {
-            try {
-                return new URL(tab.url).origin === origin;
-            } catch {
-                return false;
-            }
+        // Wait for tab to be fully loaded
+        const tabReady = await new Promise((resolve) => {
+            const listener = (tabId, changeInfo, tab) => {
+                try {
+                    const tabOrigin = new URL(tab.url).origin;
+                    if (tabOrigin === origin && changeInfo.status === 'complete') {
+                        chrome.tabs.onUpdated.removeListener(listener);
+                        resolve(tab);
+                    }
+                } catch (e) {
+                    // Invalid URL, ignore
+                }
+            };
+
+            chrome.tabs.onUpdated.addListener(listener);
         });
 
-        if (matchedTab) {
-            const isContentScriptAvailable = await new Promise(resolve => {
-                chrome.tabs.sendMessage(matchedTab.id, {type: "PING"}, response => {
-                    resolve(!chrome.runtime.lastError);
-                });
-            });
-
-            if (!isContentScriptAvailable) {
-                await chrome.scripting.executeScript({
-                    target: {tabId: matchedTab.id},
-                    files: ['content_script.js']
-                });
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-
-            await chrome.tabs.sendMessage(matchedTab.id, {
-                type: "CHECK_SITE",
-                url: origin,
-                options: options
-            });
+        if (!tabReady) {
+            return;
         }
+
+        const isContentScriptAvailable = await new Promise(resolve => {
+            chrome.tabs.sendMessage(tabReady.id, {type: "PING"}, response => {
+                resolve(!chrome.runtime.lastError);
+            });
+        });
+
+        if (!isContentScriptAvailable) {
+            await chrome.scripting.executeScript({
+                target: {tabId: tabReady.id},
+                files: ['content_script.js']
+            });
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        await chrome.tabs.sendMessage(tabReady.id, {
+            type: "CHECK_SITE",
+            url: origin,
+            options: options
+        });
     } catch (error) {
         debugLog('Error in processListener:', error);
     } finally {
