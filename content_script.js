@@ -8,6 +8,7 @@ if (typeof window.dotGitInjected === 'undefined') {
             console.log('[DotGit]', ...args);
         }
     }
+    debugLog("Content script initialized");
 
     // Content script for checking exposed Git repositories and sensitive files
     const GIT_PATH = "/.git/";

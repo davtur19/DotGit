@@ -35,37 +35,15 @@ const EXTENSION_ICON = {
     "96": "icons/dotgit-96.png"
 };
 
-const WS_SEARCH = /(ws)(s)?:\/\//;
-const WS_REPLACE = "http$2://";
-
 const GIT_PATH = "/.git/";
-const GIT_HEAD_PATH = GIT_PATH + "HEAD";
-const GIT_CONFIG_PATH = GIT_PATH + "config";
-const GIT_HEAD_HEADER = "ref: refs/heads/";
-
 const SVN_PATH = "/.svn/";
-const SVN_DB_PATH = SVN_PATH + "wc.db";
-const SVN_DB_HEADER = "SQLite";
-
 const HG_PATH = "/.hg/";
-const HG_MANIFEST_PATH = HG_PATH + "store/00manifest.i";
-const HG_MANIFEST_HEADERS = [
-    "\u0000\u0000\u0000\u0001",
-    "\u0000\u0001\u0000\u0001",
-    "\u0000\u0002\u0000\u0001",
-    "\u0000\u0003\u0000\u0001",
-];
-
 const ENV_PATH = "/.env";
-const ENV_SEARCH = "^[A-Z_]+=|^[#\\n\\r ][\\s\\S]*^[A-Z_]+=";
-
 const DS_STORE = "/.DS_Store";
-const DS_STORE_HEADER = "\x00\x00\x00\x01Bud1";
 
 const GIT_TREE_HEADER = "tree ";
 const GIT_OBJECTS_PATH = "objects/";
 const GIT_OBJECTS_SEARCH = "[a-f0-9]{40}";
-const GIT_CONFIG_SEARCH = "url = (.*(github\\.com|gitlab\\.com).*)";
 const GIT_PACK_PATH = "objects/pack/";
 const GIT_PACK_SEARCH = "pack\-[a-f0-9]{40}";
 const GIT_PACK_EXT = ".pack";
@@ -73,12 +51,6 @@ const GIT_IDX_EXT = ".idx";
 const SHA1_SIZE = 20;
 const GIT_BLOB_DELIMITER = String.fromCharCode(0);
 const STATUS_DESCRIPTION = "HTTP Status code for downloaded files: 200 Good, 404 Normal, 403 and 5XX Bad\n";
-
-const SECURITYTXT_PATHS = [
-    "/.well-known/security.txt",
-    "/security.txt",
-];
-const SECURITYTXT_SEARCH = "Contact: ";
 
 const GIT_WELL_KNOW_PATHS = [
     "HEAD",
@@ -118,13 +90,47 @@ let failed_in_a_row;
 let check_failed;
 let blacklist = [];
 let processingUrls = new Set();
-let debug;
+let debug = false;
 
 function debugLog(...args) {
     if (debug) {
         console.log('[DotGit Debug]', ...args);
     }
 }
+debugLog('Background script loaded');
+
+// Firefox persistence mechanism for Manifest V3
+let isWorkerActive = true;
+
+// Keep worker alive with periodic activity
+const keepAlive = setInterval(() => {
+    if (!isWorkerActive) {
+        clearInterval(keepAlive);
+        return;
+    }
+    
+    // Perform a minimal operation to keep the worker active
+    chrome.storage.local.get(['lastActivity'], (result) => {
+        chrome.storage.local.set({ lastActivity: Date.now() });
+    });
+}, 25000); // Every 25 seconds
+
+// Handle extension lifecycle events
+chrome.runtime.onStartup.addListener(() => {
+    debugLog('Extension started');
+    isWorkerActive = true;
+});
+
+chrome.runtime.onInstalled.addListener((details) => {
+    debugLog('Extension installed/updated:', details.reason);
+    isWorkerActive = true;
+});
+
+// Handle when Firefox suspends the worker
+chrome.runtime.onSuspend.addListener(() => {
+    debugLog('Service worker suspended');
+    isWorkerActive = false;
+});
 
 function notification(title, message) {
     if (title === "Download status") {
@@ -160,7 +166,7 @@ function sendDownloadStatus(url, downloadStatus) {
     });
 }
 
-// it may happen that the badge is set at the same time by several checks, in this way it could be increased only once
+// it may happen that the badge is set at the same time by several checks. in this way it could be increased only once
 async function setBadge() {
     try {
         const result = await chrome.storage.local.get(["withExposedGit"]);
@@ -171,160 +177,6 @@ async function setBadge() {
     } catch (error) {
         debugLog('setBadge - Error:', error);
     }
-}
-
-
-async function fetchWithTimeout(resource, options) {
-    const {timeout = 10000} = options;
-
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeout);
-
-    const response = await fetch(resource, {
-        ...options,
-        signal: controller.signal
-    });
-    clearTimeout(id);
-
-    return response;
-}
-
-
-async function checkGit(url) {
-    const to_check = url + GIT_HEAD_PATH;
-    const search = new RegExp(GIT_OBJECTS_SEARCH, "y");
-
-    try {
-        const response = await fetchWithTimeout(to_check, {
-            redirect: "manual",
-            timeout: 10000
-        });
-
-        if (response.status === 200) {
-            let text = await response.text();
-            if (text !== false && (text.startsWith(GIT_HEAD_HEADER) === true || search.test(text) === true)) {
-                // .git found
-                setBadge();
-                notification("Found an exposed .git", to_check);
-                return true;
-            }
-        }
-    } catch (error) {
-        // Timeouts if the request takes longer than X seconds
-        debugLog('Error in checkGit, Timeout:', error);
-    }
-
-    return false;
-}
-
-async function checkSvn(url) {
-    const to_check = url + SVN_DB_PATH;
-
-    try {
-        const response = await fetchWithTimeout(to_check, {
-            redirect: "manual",
-            timeout: 10000
-        });
-
-        if (response.status === 200) {
-            let text = await response.text();
-            if (text !== false && text.startsWith(SVN_DB_HEADER) === true) {
-                // .svn found
-                setBadge();
-                notification("Found an exposed .svn", to_check);
-                return true;
-            }
-        }
-    } catch (error) {
-        // Timeouts if the request takes longer than X seconds
-        debugLog('Error in checkSvn, Timeout:', error);
-    }
-
-    return false;
-}
-
-async function checkHg(url) {
-    const to_check = url + HG_MANIFEST_PATH;
-
-    try {
-        const response = await fetchWithTimeout(to_check, {
-            redirect: "manual",
-            timeout: 10000
-        });
-
-        if (response.status === 200) {
-            let text = await response.text();
-            if (text !== false && (
-                text.startsWith(HG_MANIFEST_HEADERS[0]) === true ||
-                text.startsWith(HG_MANIFEST_HEADERS[1]) === true ||
-                text.startsWith(HG_MANIFEST_HEADERS[2]) === true ||
-                text.startsWith(HG_MANIFEST_HEADERS[3]) === true)
-            ) {
-                // .hg found
-                setBadge();
-                notification("Found an exposed .hg", to_check);
-                return true;
-            }
-        }
-    } catch (error) {
-        // Timeouts if the request takes longer than X seconds
-        debugLog('Error in checkHg, Timeout:', error);
-    }
-
-    return false;
-}
-
-async function checkEnv(url) {
-    const to_check = url + ENV_PATH;
-    const search = new RegExp(ENV_SEARCH, "g");
-
-    try {
-        const response = await fetchWithTimeout(to_check, {
-            redirect: "manual",
-            timeout: 10000
-        });
-
-        if (response.status === 200) {
-            let text = await response.text();
-            if (text !== false && search.test(text) === true) {
-                // .env found
-                setBadge();
-                notification("Found an exposed .env", to_check);
-                return true;
-            }
-        }
-    } catch (error) {
-        // Timeouts if the request takes longer than X seconds
-        debugLog('Error in checkEnv, Timeout:', error);
-    }
-
-    return false;
-}
-
-async function checkDSStore(url) {
-    const to_check = url + DS_STORE;
-
-    try {
-        const response = await fetchWithTimeout(to_check, {
-            redirect: "manual",
-            timeout: 10000
-        });
-
-        if (response.status === 200) {
-            let text = await response.text();
-            if (text !== false && text.startsWith(DS_STORE_HEADER[0]) === true) {
-
-                setBadge();
-                notification("Found an exposed .DS_Store", to_check);
-                return true;
-            }
-        }
-    } catch (error) {
-        // Timeouts if the request takes longer than X seconds
-        debugLog('Error in checkDSStore, Timeout:', error);
-    }
-
-    return false;
 }
 
 
@@ -476,7 +328,7 @@ function startDownload(baseUrl, downloadFinished) {
                         hash += chr.length < 2 ? "0" + chr : chr;
                     }
 
-                    // make object path and download
+                    // make an object path and download
                     let path = GIT_OBJECTS_PATH + hash.slice(0, 2) + "/" + hash.slice(2);
                     downloadFile(path, true, checkResult);
                 }
@@ -497,7 +349,7 @@ function startDownload(baseUrl, downloadFinished) {
 
 
             for (let i = 0; i < matches.length; i++) {
-                // make object path and download
+                // make an object path and download
                 let path = GIT_OBJECTS_PATH + matches[i].slice(0, 2) + "/" + matches[i].slice(2);
                 downloadFile(path, true, checkResult);
             }
@@ -834,7 +686,7 @@ async function processListener(details) {
         alreadyChecked.push(origin);
         await chrome.storage.local.set({checked: alreadyChecked});
 
-        // Wait for tab to be fully loaded
+        // Wait for the tab to be fully loaded
         const tabReady = await new Promise((resolve) => {
             const listener = (tabId, changeInfo, tab) => {
                 try {
@@ -900,16 +752,6 @@ function checkBlacklist(hostname) {
 
 function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
-}
-
-
-function isValidUrl(string) {
-    try {
-        new URL(string);
-    } catch (_) {
-        return false;
-    }
-    return true;
 }
 
 // Add listener for installation
