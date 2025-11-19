@@ -43,6 +43,93 @@ if (typeof window.dotGitInjected === 'undefined') {
     ];
     const SECURITYTXT_SEARCH = "Contact: ";
 
+    // Comprehensive sensitive files detection with severity levels
+    const SENSITIVE_FILES = {
+        // CRITICAL - Direct credential exposure
+        "CRITICAL": [
+            {path: "/.env", pattern: /^[A-Z_]+=.+/m, name: "Environment file"},
+            {path: "/.env.local", pattern: /^[A-Z_]+=.+/m, name: "Local environment file"},
+            {path: "/.env.production", pattern: /^[A-Z_]+=.+/m, name: "Production environment file"},
+            {path: "/.env.dev", pattern: /^[A-Z_]+=.+/m, name: "Dev environment file"},
+            {path: "/.env.backup", pattern: /^[A-Z_]+=.+/m, name: "Backup environment file"},
+            {path: "/.env.old", pattern: /^[A-Z_]+=.+/m, name: "Old environment file"},
+            {path: "/.aws/credentials", pattern: /aws_access_key_id|aws_secret_access_key/i, name: "AWS credentials"},
+            {path: "/.ssh/id_rsa", pattern: /BEGIN.*PRIVATE KEY/i, name: "SSH private key"},
+            {path: "/.ssh/id_dsa", pattern: /BEGIN.*PRIVATE KEY/i, name: "SSH DSA key"},
+            {path: "/id_rsa", pattern: /BEGIN.*PRIVATE KEY/i, name: "SSH private key (root)"},
+            {path: "/id_dsa", pattern: /BEGIN.*PRIVATE KEY/i, name: "SSH DSA key (root)"},
+            {path: "/credentials.json", pattern: /"private_key"|"api_key"|"password"/i, name: "Credentials JSON"},
+            {path: "/secrets.yml", pattern: /password:|token:|key:|secret:/i, name: "Secrets YAML"},
+            {path: "/secrets.yaml", pattern: /password:|token:|key:|secret:/i, name: "Secrets YAML"},
+            {path: "/.npmrc", pattern: /_authToken|_password|:_auth/i, name: "NPM credentials"},
+            {path: "/.pypirc", pattern: /password\s*=/i, name: "PyPI credentials"},
+            {path: "/.dockercfg", pattern: /auth|password/i, name: "Docker credentials"},
+            {path: "/.docker/config.json", pattern: /auth|password/i, name: "Docker config"},
+            {path: "/.netrc", pattern: /password|login/i, name: "Netrc credentials"},
+            {path: "/wp-config.php", pattern: /DB_PASSWORD|DB_HOST|DB_USER/i, name: "WordPress config"},
+            {path: "/.htpasswd", pattern: /:/,name: "Apache htpasswd"},
+        ],
+
+        // HIGH - Configuration with potential secrets
+        "HIGH": [
+            {path: "/config.php", pattern: /<\?php/i, name: "PHP config"},
+            {path: "/configuration.php", pattern: /<\?php/i, name: "PHP configuration"},
+            {path: "/config.yml", pattern: /\w+:/i, name: "Config YAML"},
+            {path: "/config.yaml", pattern: /\w+:/i, name: "Config YAML"},
+            {path: "/config.json", pattern: /".*":/i, name: "Config JSON"},
+            {path: "/settings.py", pattern: /SECRET_KEY|DATABASE|PASSWORD/i, name: "Django settings"},
+            {path: "/database.yml", pattern: /password:|host:|username:/i, name: "Database YAML"},
+            {path: "/database.yaml", pattern: /password:|host:|username:/i, name: "Database YAML"},
+            {path: "/app.config", pattern: /</i, name: "App config"},
+            {path: "/web.config", pattern: /<configuration/i, name: "Web config"},
+            {path: "/application.properties", pattern: /=/i, name: "Application properties"},
+            {path: "/application.yml", pattern: /\w+:/i, name: "Application YAML"},
+            {path: "/.htaccess", pattern: /.+/i, name: "Apache htaccess"},
+            {path: "/docker-compose.yml", pattern: /version:|services:/i, name: "Docker Compose"},
+            {path: "/docker-compose.yaml", pattern: /version:|services:/i, name: "Docker Compose"},
+            {path: "/.dockerenv", pattern: null, name: "Docker environment marker"},
+            {path: "/Dockerfile", pattern: /FROM|RUN|ENV/i, name: "Dockerfile"},
+        ],
+
+        // MEDIUM - Database dumps and backups
+        "MEDIUM": [
+            {path: "/backup.sql", pattern: /INSERT INTO|CREATE TABLE|DROP TABLE/i, name: "SQL backup"},
+            {path: "/database.sql", pattern: /INSERT INTO|CREATE TABLE|DROP TABLE/i, name: "SQL database"},
+            {path: "/dump.sql", pattern: /INSERT INTO|CREATE TABLE|DROP TABLE/i, name: "SQL dump"},
+            {path: "/db.sql", pattern: /INSERT INTO|CREATE TABLE|DROP TABLE/i, name: "SQL database"},
+            {path: "/backup.zip", pattern: null, contentType: "application/zip", name: "Backup ZIP"},
+            {path: "/backup.tar.gz", pattern: null, contentType: "application/gzip", name: "Backup tar.gz"},
+            {path: "/backup.tar", pattern: null, contentType: "application/x-tar", name: "Backup tar"},
+            {path: "/db_backup.sql", pattern: /INSERT INTO|CREATE TABLE/i, name: "Database backup"},
+            {path: "/mysql.sql", pattern: /INSERT INTO|CREATE TABLE/i, name: "MySQL dump"},
+            {path: "/postgres.sql", pattern: /INSERT INTO|CREATE TABLE/i, name: "PostgreSQL dump"},
+        ],
+
+        // LOW - Information disclosure
+        "LOW": [
+            {path: "/.bash_history", pattern: /.+/i, name: "Bash history"},
+            {path: "/.zsh_history", pattern: /.+/i, name: "Zsh history"},
+            {path: "/.mysql_history", pattern: /SELECT|INSERT|UPDATE|DELETE/i, name: "MySQL history"},
+            {path: "/.psql_history", pattern: /SELECT|INSERT|UPDATE|DELETE/i, name: "PostgreSQL history"},
+            {path: "/composer.json", pattern: /"name"|"require"/i, name: "Composer config"},
+            {path: "/package.json", pattern: /"name"|"dependencies"/i, name: "NPM package.json"},
+            {path: "/yarn.lock", pattern: /#.*yarn/i, name: "Yarn lockfile"},
+            {path: "/package-lock.json", pattern: /"name"|"lockfileVersion"/i, name: "NPM lockfile"},
+            {path: "/Gemfile", pattern: /gem|source/i, name: "Ruby Gemfile"},
+            {path: "/Gemfile.lock", pattern: /GEM/i, name: "Ruby Gemfile lock"},
+            {path: "/requirements.txt", pattern: /.*==/i, name: "Python requirements"},
+            {path: "/Pipfile", pattern: /\[packages\]/i, name: "Python Pipfile"},
+            {path: "/.gitignore", pattern: /.+/i, name: "Git ignore"},
+            {path: "/.git/config", pattern: /\[core\]|\[remote/i, name: "Git config"},
+            {path: "/.DS_Store", pattern: null, name: "macOS DS_Store"},
+            {path: "/phpinfo.php", pattern: /PHP Version|phpinfo/i, name: "PHP info"},
+            {path: "/info.php", pattern: /PHP Version|phpinfo/i, name: "PHP info"},
+            {path: "/test.php", pattern: /<\?php/i, name: "PHP test file"},
+            {path: "/README.md", pattern: /#/i, name: "README"},
+            {path: "/CHANGELOG.md", pattern: /.+/i, name: "Changelog"},
+        ]
+    };
+
     // Helper function to make fetch requests with timeout
     async function fetchWithTimeout(resource, options = {}) {
         const { timeout = 10000 } = options;
@@ -261,6 +348,70 @@ if (typeof window.dotGitInjected === 'undefined') {
         return false;
     }
 
+    // Check for sensitive files
+    async function checkSensitiveFiles(url, options) {
+        const findings = [];
+
+        if (!options.check_sensitive_files) {
+            return findings;
+        }
+
+        debugLog('Starting sensitive files scan...');
+
+        for (const [severity, files] of Object.entries(SENSITIVE_FILES)) {
+            for (const file of files) {
+                try {
+                    const to_check = url + file.path;
+                    debugLog('Checking:', to_check);
+
+                    const response = await fetchWithTimeout(to_check, {
+                        redirect: "manual",
+                        timeout: 10000
+                    });
+
+                    if (response.status === 200) {
+                        let isValid = false;
+
+                        // Check content type if specified
+                        if (file.contentType) {
+                            const contentType = response.headers.get('content-type');
+                            if (contentType && contentType.includes(file.contentType)) {
+                                isValid = true;
+                            }
+                        }
+                        // Check pattern if specified
+                        else if (file.pattern) {
+                            const text = await response.text();
+                            if (file.pattern.test(text)) {
+                                isValid = true;
+                            }
+                        }
+                        // No validation required (just existence)
+                        else {
+                            isValid = true;
+                        }
+
+                        if (isValid) {
+                            debugLog(`FOUND [${severity}]:`, file.name, 'at', to_check);
+                            findings.push({
+                                severity: severity,
+                                path: file.path,
+                                name: file.name,
+                                url: to_check
+                            });
+                        }
+                    }
+                } catch (error) {
+                    // Ignore errors for individual files
+                    debugLog('Error checking file:', file.path, error.message);
+                }
+            }
+        }
+
+        debugLog('Sensitive files scan complete. Found:', findings.length);
+        return findings;
+    }
+
     async function isOpenSource(url) {
         let configUrl;
         let str = "";
@@ -297,19 +448,20 @@ if (typeof window.dotGitInjected === 'undefined') {
     async function checkSite(url, options) {
         try {
             debugLog('Starting site check for:', url);
-            
+
             // Run all checks in parallel
-            const [git, svn, hg, env, ds_store, securitytxt, opensource] = await Promise.all([
+            const [git, svn, hg, env, ds_store, securitytxt, opensource, sensitiveFiles] = await Promise.all([
                 options.functions.git ? checkGit(url) : Promise.resolve(false),
                 options.functions.svn ? checkSvn(url) : Promise.resolve(false),
                 options.functions.hg ? checkHg(url) : Promise.resolve(false),
                 options.functions.env ? checkEnv(url) : Promise.resolve(false),
                 options.functions.ds_store ? checkDSStore(url) : Promise.resolve(false),
                 options.check_securitytxt ? checkSecuritytxt(url) : Promise.resolve(false),
-                options.functions.git && options.check_opensource ? isOpenSource(url) : Promise.resolve(false)
+                options.functions.git && options.check_opensource ? isOpenSource(url) : Promise.resolve(false),
+                checkSensitiveFiles(url, options)
             ]);
 
-            debugLog('Check results:', { git, svn, hg, env, ds_store, securitytxt, opensource });
+            debugLog('Check results:', { git, svn, hg, env, ds_store, securitytxt, opensource, sensitiveFiles });
 
             const types = [];
             if (git) types.push('git');
@@ -341,6 +493,23 @@ if (typeof window.dotGitInjected === 'undefined') {
                 }
             }
 
+            // Send sensitive files findings
+            if (sensitiveFiles && sensitiveFiles.length > 0) {
+                debugLog('Sending sensitive files findings:', sensitiveFiles.length);
+                await new Promise((resolve) => {
+                    chrome.runtime.sendMessage({
+                        type: "SENSITIVE_FILES_FOUND",
+                        data: {
+                            url: url,
+                            findings: sensitiveFiles
+                        }
+                    }, response => {
+                        debugLog('Background response for sensitive files:', response);
+                        resolve();
+                    });
+                });
+            }
+
             return {
                 git,
                 svn,
@@ -348,7 +517,8 @@ if (typeof window.dotGitInjected === 'undefined') {
                 env,
                 ds_store,
                 securitytxt,
-                opensource
+                opensource,
+                sensitiveFiles: sensitiveFiles.length
             };
         } catch (error) {
             debugLog('Error during checks:', error);
@@ -360,6 +530,7 @@ if (typeof window.dotGitInjected === 'undefined') {
                 ds_store: false,
                 securitytxt: false,
                 opensource: false,
+                sensitiveFiles: 0,
                 error: error.message
             };
         }
@@ -368,7 +539,12 @@ if (typeof window.dotGitInjected === 'undefined') {
     // Listen for messages from the background script
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         debugLog('Received message:', request);
-        
+
+        if (request.type === "PING") {
+            sendResponse({status: "pong"});
+            return true;
+        }
+
         if (request.type === "CHECK_SITE") {
             const { url, options } = request;
             debug = options.debug;

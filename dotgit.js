@@ -17,6 +17,7 @@ const DEFAULT_OPTIONS = {
     },
     "check_opensource": true,
     "check_securitytxt": true,
+    "check_sensitive_files": true,  // Enable comprehensive sensitive file scanning
     "debug": false,
     "check_failed": true,
     "download": {
@@ -81,6 +82,7 @@ let notification_new_git;
 let notification_download;
 let check_opensource;
 let check_securitytxt;
+let check_sensitive_files;
 let check_git;
 let check_svn;
 let check_hg;
@@ -401,6 +403,7 @@ function set_options(options) {
     notification_download = options.notification.download;
     check_opensource = options.check_opensource;
     check_securitytxt = options.check_securitytxt;
+    check_sensitive_files = options.check_sensitive_files !== undefined ? options.check_sensitive_files : true;
     check_git = options.functions.git;
     check_svn = options.functions.svn;
     check_hg = options.functions.hg;
@@ -490,6 +493,64 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             }
         });
         return true;
+    } else if (msg.type === "SENSITIVE_FILES_FOUND") {
+        chrome.storage.local.get(["withExposedGit"], async (result) => {
+            try {
+                let withExposedGit = result.withExposedGit || [];
+                const data = msg.data;
+                const origin = data.url;
+                let updatedList = false;
+
+                debugLog('Processing sensitive files findings:', data.findings.length);
+
+                for (const finding of data.findings) {
+                    // Check if this exact file hasn't been found before
+                    if (!withExposedGit.some(item =>
+                        item.url === origin && item.foundAt === finding.url
+                    )) {
+                        withExposedGit.push({
+                            type: 'sensitive_file',
+                            url: origin,
+                            foundAt: finding.url,
+                            severity: finding.severity,
+                            fileName: finding.name,
+                            filePath: finding.path,
+                            open: false,
+                            securitytxt: false
+                        });
+                        updatedList = true;
+                    }
+                }
+
+                if (updatedList) {
+                    await chrome.storage.local.set({withExposedGit});
+                    await setBadge();
+
+                    // Count findings by severity
+                    const severityCounts = data.findings.reduce((acc, f) => {
+                        acc[f.severity] = (acc[f.severity] || 0) + 1;
+                        return acc;
+                    }, {});
+
+                    const severityText = Object.entries(severityCounts)
+                        .map(([sev, count]) => `${sev}: ${count}`)
+                        .join(', ');
+
+                    chrome.notifications.create({
+                        type: "basic",
+                        iconUrl: chrome.runtime.getURL(EXTENSION_ICON["48"]),
+                        title: `${data.findings.length} Sensitive File(s) Found!`,
+                        message: `${origin}\n${severityText}`
+                    });
+                }
+
+                sendResponse({status: true});
+            } catch (error) {
+                debugLog('Error processing sensitive files:', error);
+                sendResponse({status: false, error: error.message});
+            }
+        });
+        return true;
     } else if (msg.type === "download") {
         notification("Download status", "Download started\nPlease wait...");
         startDownload(msg.url, async (fileExist, downloadStats) => {
@@ -543,6 +604,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         'notification_download': () => notification_download = msg.value,
         'check_opensource': () => check_opensource = msg.value,
         'check_securitytxt': () => check_securitytxt = msg.value,
+        'check_sensitive_files': () => check_sensitive_files = msg.value,
         'debug': () => debug = msg.value,
         'max_connections': () => max_connections = msg.value,
         'wait': () => wait = msg.value,
@@ -679,53 +741,103 @@ async function processListener(details) {
         const options = result.options || DEFAULT_OPTIONS;
         const alreadyChecked = result.checked || [];
 
-        if (alreadyChecked.includes(origin) || checkBlacklist(new URL(origin).hostname)) {
+        if (checkBlacklist(new URL(origin).hostname)) {
+            debugLog('Origin blacklisted:', origin);
             return;
         }
 
-        alreadyChecked.push(origin);
-        await chrome.storage.local.set({checked: alreadyChecked});
+        if (alreadyChecked.includes(origin)) {
+            debugLog('Origin already checked:', origin);
+            return;
+        }
 
-        // Wait for the tab to be fully loaded
-        const tabReady = await new Promise((resolve) => {
-            const listener = (tabId, changeInfo, tab) => {
-                try {
-                    const tabOrigin = new URL(tab.url).origin;
-                    if (tabOrigin === origin && changeInfo.status === 'complete') {
-                        chrome.tabs.onUpdated.removeListener(listener);
-                        resolve(tab);
-                    }
-                } catch (e) {
-                    // Invalid URL, ignore
+        // Find the tab with this origin
+        const tabs = await chrome.tabs.query({});
+        let targetTab = null;
+
+        for (const tab of tabs) {
+            try {
+                if (tab.url && new URL(tab.url).origin === origin) {
+                    targetTab = tab;
+                    break;
                 }
-            };
+            } catch (e) {
+                // Invalid URL, ignore
+            }
+        }
 
-            chrome.tabs.onUpdated.addListener(listener);
-        });
-
-        if (!tabReady) {
+        if (!targetTab) {
+            debugLog('No tab found for origin:', origin);
             return;
         }
 
-        const isContentScriptAvailable = await new Promise(resolve => {
+        // Wait for the tab to be fully loaded if it's not already
+        let tabReady = targetTab;
+        if (targetTab.status !== 'complete') {
+            debugLog('Tab not ready, waiting for complete status...');
+            tabReady = await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    chrome.tabs.onUpdated.removeListener(listener);
+                    debugLog('Tab load timeout for:', origin);
+                    reject(new Error('Tab load timeout'));
+                }, 15000); // 15 second timeout
+
+                const listener = (tabId, changeInfo, tab) => {
+                    try {
+                        if (tabId === targetTab.id && changeInfo.status === 'complete') {
+                            clearTimeout(timeout);
+                            chrome.tabs.onUpdated.removeListener(listener);
+                            resolve(tab);
+                        }
+                    } catch (e) {
+                        debugLog('Error in tab listener:', e);
+                    }
+                };
+
+                chrome.tabs.onUpdated.addListener(listener);
+            });
+        }
+
+        // Content script is already injected via manifest, just verify it's ready
+        const isContentScriptReady = await new Promise(resolve => {
             chrome.tabs.sendMessage(tabReady.id, {type: "PING"}, response => {
-                resolve(!chrome.runtime.lastError);
+                if (chrome.runtime.lastError) {
+                    debugLog('Content script not ready:', chrome.runtime.lastError.message);
+                    resolve(false);
+                } else {
+                    debugLog('Content script ready');
+                    resolve(true);
+                }
             });
         });
 
-        if (!isContentScriptAvailable) {
-            await chrome.scripting.executeScript({
-                target: {tabId: tabReady.id},
-                files: ['content_script.js']
-            });
-            await new Promise(resolve => setTimeout(resolve, 100));
+        if (!isContentScriptReady) {
+            debugLog('Content script not available for tab:', tabReady.id);
+            // Try to inject manually as fallback
+            try {
+                await chrome.scripting.executeScript({
+                    target: {tabId: tabReady.id},
+                    files: ['content_script.js']
+                });
+                await new Promise(resolve => setTimeout(resolve, 500));
+                debugLog('Content script injected manually');
+            } catch (injectError) {
+                debugLog('Failed to inject content script:', injectError);
+                return;
+            }
         }
 
+        debugLog('Sending CHECK_SITE message to tab:', tabReady.id);
         await chrome.tabs.sendMessage(tabReady.id, {
             type: "CHECK_SITE",
             url: origin,
             options: options
         });
+
+        // Only mark as checked AFTER successful check
+        alreadyChecked.push(origin);
+        await chrome.storage.local.set({checked: alreadyChecked});
+        debugLog('Successfully checked and stored:', origin);
     } catch (error) {
         debugLog('Error in processListener:', error);
     } finally {

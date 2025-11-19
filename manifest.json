@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "DotGit",
-  "version": "5.2",
-  "description": "An extension for checking if .git is exposed in visited websites",
+  "version": "6.0",
+  "description": "Detect exposed .git, sensitive files, credentials and configuration files on websites",
   "icons": {
     "16": "icons/dotgit-16.png",
     "32": "icons/dotgit-32.png",
