@@ -156,6 +156,16 @@ function addElements(element, array, callback, downloading, max_sites) {
             link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.env");
         }
         if (callback(array[i].type) === "ds_store") {
+            const spanBrowse = document.createElement("span");
+            spanBrowse.setAttribute("class", "secondary-content");
+            const btnBrowse = document.createElement("i");
+            btnBrowse.setAttribute("id", "dsbrowse:" + callback(array[i].url));
+            btnBrowse.setAttribute("class", "material-icons btn-small green browse-dsstore");
+            btnBrowse.setAttribute("title", "Browse .DS_Store file listing");
+            btnBrowse.innerText = "folder_open";
+            spanBrowse.appendChild(btnBrowse);
+            listItem.appendChild(spanBrowse);
+
             if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
                 listItem.appendChild(spanSecuritytxtStatus);
             }
@@ -236,6 +246,13 @@ document.addEventListener("click", async (event) => {
                 });
             }
         });
+    } else if (button.classList.contains("browse-dsstore")) {
+        const url = button.id.substring("dsbrowse:".length);
+        openDsStoreBrowser(url);
+    } else if (button.id === "dss-back") {
+        dssNavigateBack();
+    } else if (button.id === "dss-close") {
+        dssClose();
     } else if (button.id === "options") {
         if (chrome.runtime.openOptionsPage) {
             chrome.runtime.openOptionsPage();
@@ -368,3 +385,218 @@ document.addEventListener("DOMContentLoaded", async function () {
         hostElementFoundTitle.textContent = "Total found: 0 Max shown: " + max_sites;
     });
 });
+
+
+// ── DS_Store Browser Panel ─────────────────────────────────────────────────
+//
+// Navigation stack: array of { baseUrl, entries } objects.
+// baseUrl is the directory URL (no trailing slash, no /.DS_Store suffix).
+// entries is the sorted string[] of filenames parsed from that level's .DS_Store.
+//
+// The stack lets the Back button re-render previous levels without re-fetching.
+
+let dssStack = [];
+
+// Open the overlay and fetch the root-level .DS_Store for the given site URL.
+async function openDsStoreBrowser(siteUrl) {
+    dssStack = [];
+
+    const overlay  = document.getElementById("dss-overlay");
+    const listEl   = document.getElementById("dss-list");
+    const statusEl = document.getElementById("dss-status");
+    const pathEl   = document.getElementById("dss-path");
+
+    // Apply the user's chosen colour theme to the overlay nav (mirrors main nav init)
+    chrome.storage.local.get(["options"], function (result) {
+        if (result.options && result.options.color) {
+            const navWrapper = document.querySelector("#dss-nav .nav-wrapper");
+            if (navWrapper && !navWrapper.classList.contains(result.options.color)) {
+                navWrapper.classList.add(result.options.color);
+            }
+        }
+    });
+
+    // Show overlay in loading state
+    listEl.innerHTML = '';
+    statusEl.style.display = "block";
+    statusEl.textContent = "Loading...";
+    pathEl.textContent = siteUrl;
+    pathEl.title = siteUrl + "/.DS_Store";
+    document.getElementById("dss-back-li").style.display = "none";
+    overlay.style.display = "flex";
+
+    await dssNavigateTo(siteUrl);
+}
+
+// Fetch, parse, and display the .DS_Store at baseUrl/.DS_Store.
+// Pushes the result onto dssStack and renders the entry list.
+async function dssNavigateTo(baseUrl) {
+    // Ensure overlay is visible before navigation
+    const overlay = document.getElementById("dss-overlay");
+    if (overlay && overlay.style.display !== "flex") {
+        overlay.style.display = "flex";
+    }
+
+    const dsUrl    = baseUrl + "/.DS_Store";
+    const statusEl = document.getElementById("dss-status");
+    const listEl   = document.getElementById("dss-list");
+    const pathEl   = document.getElementById("dss-path");
+    const backEl   = document.getElementById("dss-back");
+
+    // Fallback: if any element is missing, abort navigation
+    if (!statusEl || !listEl || !pathEl || !backEl) {
+        debugLog("dssNavigateTo: Overlay or children missing, aborting navigation", { statusEl, listEl, pathEl, backEl });
+        return;
+    }
+
+    listEl.innerHTML = '';
+    statusEl.style.display = "block";
+    statusEl.textContent = "Fetching\u2026";
+    pathEl.textContent = baseUrl;
+    pathEl.title = dsUrl;
+
+    let entries;
+    try {
+        const response = await fetch(dsUrl, { redirect: "manual" });
+        if (response.status !== 200) {
+            throw new Error("HTTP " + response.status);
+        }
+        const buffer = await response.arrayBuffer();
+        entries = parseDSStore(buffer);
+    } catch (e) {
+        statusEl.textContent = "Error: " + e.message;
+        return;
+    }
+
+    if (entries.length === 0) {
+        statusEl.textContent = "No entries found in .DS_Store.";
+        return;
+    }
+
+    // Push this level onto the navigation stack
+    dssStack.push({ baseUrl, entries });
+
+    // Show the Back button once we have at least two levels
+    if (dssStack.length > 1) {
+        document.getElementById("dss-back-li").style.display = "";
+    }
+
+    statusEl.style.display = "none";
+    dssRenderEntries(baseUrl, entries, listEl);
+}
+
+// Render the file list for a given directory level.
+function dssRenderEntries(baseUrl, entries, listEl) {
+    listEl.innerHTML = '';
+
+    const itemPairs = entries.map(name => {
+        const li = document.createElement("li");
+        li.setAttribute("class", "collection-item dss-entry dss-loading");
+
+        const icon = document.createElement("i");
+        icon.setAttribute("class", "material-icons");
+        icon.textContent = "folder";           // default; updated after probe
+
+        const label = document.createElement("span");
+        label.textContent = name;
+
+        li.appendChild(icon);
+        li.appendChild(label);
+        listEl.appendChild(li);
+        return { li, icon, label, name };
+    });
+
+    // Probe all entries for nested .DS_Store files in parallel
+    itemPairs.forEach(({ li, icon, label, name }) => {
+        dssProbeEntry(baseUrl, name).then(browsable => {
+            li.classList.remove("dss-loading");
+
+            if (browsable) {
+                // Browsable directory: navigates on click
+                li.classList.add("dss-browsable");
+                icon.textContent = "folder_open";
+                li.addEventListener("click", () => {
+                    dssNavigateTo(baseUrl + "/" + encodeURIComponent(name));
+                });
+            } else {
+                // Non-browsable: clicking opens the URL as a link
+                li.classList.add("dss-grey");
+                // Guess icon: entries with a file extension get a file icon
+                const hasExtension = /\.[^./]+$/.test(name);
+                icon.textContent = hasExtension ? "insert_drive_file" : "folder";
+
+                // Wrap in an anchor so the URL opens in a new tab
+                const a = document.createElement("a");
+                a.href = baseUrl + "/" + encodeURIComponent(name);
+                a.textContent = name;
+                label.textContent = "";
+                label.appendChild(a);
+            }
+        });
+    });
+}
+
+// Returns true if baseUrl/name/.DS_Store exists and passes validation.
+async function dssProbeEntry(baseUrl, name) {
+    const probeUrl = baseUrl + "/" + encodeURIComponent(name) + "/.DS_Store";
+    try {
+        const fetchOpts = { redirect: "manual" };
+        // AbortSignal.timeout is available in Chrome 103+ / Firefox 100+
+        if (typeof AbortSignal !== "undefined" && AbortSignal.timeout) {
+            fetchOpts.signal = AbortSignal.timeout(8000);
+        }
+        const response = await fetch(probeUrl, fetchOpts);
+        if (response.status !== 200) return false;
+
+        const buf = await response.arrayBuffer();
+        if (buf.byteLength < 8) return false;
+
+        const view = new DataView(buf);
+        if (view.getUint32(0, false) !== 0x00000001) return false;
+        const b = new Uint8Array(buf, 4, 4);
+        // "Bud1" = 0x42 0x75 0x64 0x31
+        return b[0] === 0x42 && b[1] === 0x75 && b[2] === 0x64 && b[3] === 0x31;
+    } catch (_) {
+        // Fail silently, likely network errors.
+        return false;
+    }
+}
+
+// Navigate back one level in the directory stack.
+function dssNavigateBack() {
+    if (dssStack.length <= 1) return;
+
+    // Always show overlay before navigation
+    const overlay = document.getElementById("dss-overlay");
+    if (overlay) overlay.style.display = "flex";
+
+    dssStack.pop();  // discard current level
+    const prev     = dssStack[dssStack.length - 1];
+    const listEl   = document.getElementById("dss-list");
+    const pathEl   = document.getElementById("dss-path");
+    const statusEl = document.getElementById("dss-status");
+
+    pathEl.textContent = prev.baseUrl;
+    pathEl.title = prev.baseUrl + "/.DS_Store";
+    statusEl.style.display = "none";
+    listEl.innerHTML = '';
+    dssRenderEntries(prev.baseUrl, prev.entries, listEl);
+
+    if (dssStack.length <= 1) {
+        document.getElementById("dss-back-li").style.display = "none";
+    }
+}
+
+// Close the overlay and reset state.
+function dssClose() {
+    dssStack = [];
+    const overlay  = document.getElementById("dss-overlay");
+    const listEl   = document.getElementById("dss-list");
+    const statusEl = document.getElementById("dss-status");
+
+    overlay.style.display = "none";
+    listEl.innerHTML = '';
+    statusEl.style.display = "none";
+    statusEl.textContent = "Loading...";
+    document.getElementById("dss-back-li").style.display = "none";
+}

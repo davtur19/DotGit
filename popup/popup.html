@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="icon.css">
     <link rel="stylesheet" href="popup.css"/>
     <base target="_blank">
+    <script src="dsstore_parser.js"></script>
     <script src="popup.js"></script>
 </head>
 <body class="darken-3 custom-color">
@@ -28,5 +29,21 @@
 <ul class="collection" id="hostsFound">
     <li class="collection-item center" id="hostsFoundTitle">Total found: 0 Max shown: 100</li>
 </ul>
+<!-- .DS_Store Browser -->
+<div id="dss-overlay" style="display:none;">
+    <nav id="dss-nav">
+        <div class="nav-wrapper darken-3 custom-color">
+            <ul class="left">
+                <li id="dss-back-li" style="display:none"><a><i class="material-icons" id="dss-back" title="Go back">arrow_back</i></a></li>
+            </ul>
+            <span class="brand-logo truncate" id="dss-path" title=""></span>
+            <ul class="right">
+                <li><a><i class="material-icons" id="dss-close" title="Close">close</i></a></li>
+            </ul>
+        </div>
+    </nav>
+    <ul class="collection" id="dss-list"></ul>
+    <div id="dss-status" class="center" style="display:none; padding: 12px;">Loading...</div>
+</div>
 </body>
 </html>

@@ -33,3 +33,90 @@ ul.collection {
     height: auto;
     color: black;
 }
+
+/* ── DS_Store Browser Overlay ─────────────────────────────────────────────── */
+
+#dss-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1000;
+    background: white;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#dss-overlay nav {
+    flex-shrink: 0;
+}
+
+#dss-path {
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: middle;
+    line-height: 56px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: white;
+}
+
+#dss-back,
+#dss-close {
+    cursor: pointer;
+}
+
+
+#dss-overlay ul.collection {
+    flex: 1;
+    overflow-y: auto;
+    margin: 7px;
+    max-height: none;
+}
+
+.dss-entry {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    word-break: break-all;
+}
+
+.dss-entry .material-icons {
+    font-size: 18px;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+/* Browsable directory - shown in blue, clickable */
+.dss-browsable {
+    color: #1565C0;
+}
+
+.dss-browsable .material-icons {
+    color: #1565C0;
+}
+
+/* Non-browsable entry (file or directory without nested .DS_Store) - grey */
+.dss-grey {
+    color: #9E9E9E;
+    cursor: default;
+}
+
+.dss-grey a {
+    color: #9E9E9E;
+}
+
+.dss-grey .material-icons {
+    color: #BDBDBD;
+}
+
+/* While probing - dim italic */
+.dss-loading {
+    color: #BDBDBD;
+    font-style: italic;
+}
