@@ -409,6 +409,10 @@ function dssOpenEntryInBackground(url) {
     window.open(url, "_blank", "noopener,noreferrer");
 }
 
+function dssIsBackgroundOpenEvent(event) {
+    return event.button === 1 || event.ctrlKey || event.metaKey;
+}
+
 // Open the overlay and fetch the root-level .DS_Store for the given site URL.
 async function openDsStoreBrowser(siteUrl) {
     dssStack = [];
@@ -523,8 +527,19 @@ function dssRenderEntries(baseUrl, entries, listEl) {
                 // Browsable directory: navigates on click
                 li.classList.add("dss-browsable");
                 icon.textContent = "folder_open";
-                li.addEventListener("click", () => {
+                li.setAttribute("title", "Click to browse, Ctrl/Cmd-click or middle-click to open in a background tab");
+
+                li.addEventListener("click", (event) => {
+                    if (dssIsBackgroundOpenEvent(event)) {
+                        dssOpenEntryInBackground(baseUrl + "/" + encodeURIComponent(name));
+                        return;
+                    }
                     dssNavigateTo(baseUrl + "/" + encodeURIComponent(name));
+                });
+                li.addEventListener("auxclick", (event) => {
+                    if (event.button !== 1) return;
+                    event.preventDefault();
+                    dssOpenEntryInBackground(baseUrl + "/" + encodeURIComponent(name));
                 });
             } else {
                 // Non-browsable: clicking opens the URL in a background tab.
