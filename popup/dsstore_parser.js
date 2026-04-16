@@ -76,7 +76,7 @@ function valueDataSize(vt, atPos, buffer, view) {
         case 'long':
             return 4;
         case 'shor':
-            return 2;
+            return 4;
         case 'ustr': {
             if (atPos + 4 > buffer.byteLength) throw new TypeError('ustr length read out of range');
             const charCount = view.getUint32(atPos, false);
@@ -152,12 +152,14 @@ function traverseNode(blockId, blockAddrs, blockCount, buffer, view, bytes, file
     traverseNode(firstChild, blockAddrs, blockCount, buffer, view, bytes, filenames, visited);
 
     for (let i = 0; i < count; i++) {
-        const next = readRecord(p, buffer, view, bytes, filenames);
-        if (next + 4 > blockEnd) throw new TypeError('Internal node child pointer out of range');
-        p = next;
-
+        if (p + 4 > blockEnd) throw new TypeError('Internal node child pointer out of range');
         const childId = view.getUint32(p, false);
         p += 4;
+
+        const next = readRecord(p, buffer, view, bytes, filenames);
+        if (next > blockEnd) throw new TypeError('Internal node record exceeds block boundary');
+        p = next;
+
         traverseNode(childId, blockAddrs, blockCount, buffer, view, bytes, filenames, visited);
     }
 }

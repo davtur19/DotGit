@@ -397,6 +397,18 @@ document.addEventListener("DOMContentLoaded", async function () {
 
 let dssStack = [];
 
+function dssSetBackVisibility() {
+    document.getElementById("dss-back-li").style.display = dssStack.length > 1 ? "" : "none";
+}
+
+function dssOpenEntryInBackground(url) {
+    if (chrome.tabs && chrome.tabs.create) {
+        chrome.tabs.create({ url, active: false });
+        return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+}
+
 // Open the overlay and fetch the root-level .DS_Store for the given site URL.
 async function openDsStoreBrowser(siteUrl) {
     dssStack = [];
@@ -422,7 +434,7 @@ async function openDsStoreBrowser(siteUrl) {
     statusEl.textContent = "Loading...";
     pathEl.textContent = siteUrl;
     pathEl.title = siteUrl + "/.DS_Store";
-    document.getElementById("dss-back-li").style.display = "none";
+    dssSetBackVisibility();
     overlay.style.display = "flex";
 
     await dssNavigateTo(siteUrl);
@@ -468,17 +480,13 @@ async function dssNavigateTo(baseUrl) {
         return;
     }
 
+    // Push this level onto the navigation stack
+    dssStack.push({ baseUrl, entries });
+    dssSetBackVisibility();
+
     if (entries.length === 0) {
         statusEl.textContent = "No entries found in .DS_Store.";
         return;
-    }
-
-    // Push this level onto the navigation stack
-    dssStack.push({ baseUrl, entries });
-
-    // Show the Back button once we have at least two levels
-    if (dssStack.length > 1) {
-        document.getElementById("dss-back-li").style.display = "";
     }
 
     statusEl.style.display = "none";
@@ -519,18 +527,19 @@ function dssRenderEntries(baseUrl, entries, listEl) {
                     dssNavigateTo(baseUrl + "/" + encodeURIComponent(name));
                 });
             } else {
-                // Non-browsable: clicking opens the URL as a link
+                // Non-browsable: clicking opens the URL in a background tab.
                 li.classList.add("dss-grey");
+                li.setAttribute("title", "Open in a background tab");
+
+                const entryUrl = baseUrl + "/" + encodeURIComponent(name);
+
+                li.addEventListener("click", () => {
+                    dssOpenEntryInBackground(entryUrl);
+                });
+
                 // Guess icon: entries with a file extension get a file icon
                 const hasExtension = /\.[^./]+$/.test(name);
                 icon.textContent = hasExtension ? "insert_drive_file" : "folder";
-
-                // Wrap in an anchor so the URL opens in a new tab
-                const a = document.createElement("a");
-                a.href = baseUrl + "/" + encodeURIComponent(name);
-                a.textContent = name;
-                label.textContent = "";
-                label.appendChild(a);
             }
         });
     });
@@ -582,9 +591,7 @@ function dssNavigateBack() {
     listEl.innerHTML = '';
     dssRenderEntries(prev.baseUrl, prev.entries, listEl);
 
-    if (dssStack.length <= 1) {
-        document.getElementById("dss-back-li").style.display = "none";
-    }
+    dssSetBackVisibility();
 }
 
 // Close the overlay and reset state.
@@ -598,5 +605,5 @@ function dssClose() {
     listEl.innerHTML = '';
     statusEl.style.display = "none";
     statusEl.textContent = "Loading...";
-    document.getElementById("dss-back-li").style.display = "none";
+    dssSetBackVisibility();
 }
