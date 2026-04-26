@@ -15,6 +15,8 @@ function set_gui(options) {
     document.getElementById("envOff").checked = !options.functions.env;
     document.getElementById("ds_storeOn").checked = options.functions.ds_store;
     document.getElementById("ds_storeOff").checked = !options.functions.ds_store;
+    document.getElementById("thumbs_dbOn").checked = options.functions.thumbs_db;
+    document.getElementById("thumbs_dbOff").checked = !options.functions.thumbs_db;
     document.getElementById("debugOn").checked = options.debug;
     document.getElementById("debugOff").checked = !options.debug;
     document.getElementById("checkFailedOn").checked = options.check_failed;
@@ -78,6 +80,14 @@ document.addEventListener("DOMContentLoaded", function () {
                 chrome.runtime.sendMessage({
                     type: e.target.name,
                     value: result.options.functions.ds_store
+                }, function (response) {
+                });
+            } else if (e.target.name === "thumbs_db") {
+                result.options.functions.thumbs_db = (e.target.value === "on");
+                chrome.storage.local.set(result);
+                chrome.runtime.sendMessage({
+                    type: e.target.name,
+                    value: result.options.functions.thumbs_db
                 }, function (response) {
                 });
             } else if (e.target.id === "color") {

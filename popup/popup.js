@@ -161,6 +161,12 @@ function addElements(element, array, callback, downloading, max_sites) {
             }
             link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.DS_Store");
         }
+        if (callback(array[i].type) === "thumbs_db") {
+            if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
+                listItem.appendChild(spanSecuritytxtStatus);
+            }
+            link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/Thumbs.db");
+        }
         link.innerText = callback(array[i].url);
 
         spanLink.appendChild(link);

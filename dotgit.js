@@ -7,7 +7,8 @@ const DEFAULT_OPTIONS = {
         "svn": false,
         "hg": false,
         "env": false,
-        "ds_store": false
+        "ds_store": false,
+        "thumbs_db": false
     },
     "color": "grey",
     "max_sites": 100,
@@ -40,6 +41,7 @@ const SVN_PATH = "/.svn/";
 const HG_PATH = "/.hg/";
 const ENV_PATH = "/.env";
 const DS_STORE = "/.DS_Store";
+const THUMBS_DB = "/Thumbs.db";
 
 const GIT_TREE_HEADER = "tree ";
 const GIT_OBJECTS_PATH = "objects/";
@@ -86,6 +88,7 @@ let check_svn;
 let check_hg;
 let check_env;
 let check_ds_store;
+let check_thumbs_db;
 let failed_in_a_row;
 let check_failed;
 let blacklist = [];
@@ -406,6 +409,7 @@ function set_options(options) {
     check_hg = options.functions.hg;
     check_env = options.functions.env;
     check_ds_store = options.functions.ds_store;
+    check_thumbs_db = options.functions.thumbs_db;
     debug = options.debug;
     check_failed = options.check_failed;
     blacklist = options.blacklist;
@@ -442,6 +446,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                         type === 'svn' ? SVN_PATH :
                         type === 'hg' ? HG_PATH :
                         type === 'env' ? ENV_PATH :
+                        type === 'thumbs_db' ? THUMBS_DB :
                         DS_STORE
                     );
 
@@ -539,6 +544,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         'hg': () => check_hg = msg.value,
         'env': () => check_env = msg.value,
         'ds_store': () => check_ds_store = msg.value,
+        'thumbs_db': () => check_thumbs_db = msg.value,
         'notification_new_git': () => notification_new_git = msg.value,
         'notification_download': () => notification_download = msg.value,
         'check_opensource': () => check_opensource = msg.value,

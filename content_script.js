@@ -35,7 +35,7 @@ if (typeof window.dotGitInjected === 'undefined') {
     const ENV_SEARCH = "^[A-Z_]+=|^[#\\n\\r ][\\s\\S]*^[A-Z_]+=";
 
     const DS_STORE = "/.DS_Store";
-    const DS_STORE_HEADER = "\x00\x00\x00\x01Bud1";
+    const THUMBS_DB = "/Thumbs.db";
 
     const SECURITYTXT_PATHS = [
         "/.well-known/security.txt",
@@ -172,7 +172,7 @@ if (typeof window.dotGitInjected === 'undefined') {
         return false;
     }
 
-    // Check for exposed .DS_Store file
+    // Check for exposed .DS_Store file (Secure Binary Verification)
     async function checkDSStore(url) {
         const to_check = url + DS_STORE;
         
@@ -183,9 +183,41 @@ if (typeof window.dotGitInjected === 'undefined') {
             });
             
             if (response.status === 200) {
-                const text = await response.text();
-                if (text.startsWith(DS_STORE_HEADER)) {
-                    return true;
+                const buffer = await response.arrayBuffer();
+                if (buffer.byteLength >= 8) {
+                    const view = new Uint8Array(buffer);
+                    // Verification of magic bytes: 0x00 0x00 0x00 0x01 'B' 'u' 'd' '1'
+                    if (view[0] === 0x00 && view[1] === 0x00 && view[2] === 0x00 && view[3] === 0x01 &&
+                        view[4] === 0x42 && view[5] === 0x75 && view[6] === 0x64 && view[7] === 0x31) {
+                        return true;
+                    }
+                }
+            }
+        } catch (error) {
+            // Ignore error
+        }
+        
+        return false;
+    }
+
+    // Check for exposed Thumbs.db file (Secure Binary Verification)
+    async function checkThumbsDb(url) {
+        const to_check = url + THUMBS_DB;
+        
+        try {
+            const response = await fetchWithTimeout(to_check, {
+                redirect: "manual",
+                timeout: 10000
+            });
+            
+            if (response.status === 200) {
+                const buffer = await response.arrayBuffer();
+                if (buffer.byteLength >= 4) {
+                    const view = new Uint8Array(buffer);
+                    // Verification of magic bytes for OLE: 0xD0 0xCF 0x11 0xE0
+                    if (view[0] === 0xD0 && view[1] === 0xCF && view[2] === 0x11 && view[3] === 0xE0) {
+                        return true;
+                    }
                 }
             }
         } catch (error) {
@@ -298,18 +330,19 @@ if (typeof window.dotGitInjected === 'undefined') {
         try {
             debugLog('Starting site check for:', url);
             
-            // Run all checks in parallel
-            const [git, svn, hg, env, ds_store, securitytxt, opensource] = await Promise.all([
+            // Run all checks in parallel (FIXED DESTRUCTURING)
+            const [git, svn, hg, env, ds_store, thumbs_db, securitytxt, opensource] = await Promise.all([
                 options.functions.git ? checkGit(url) : Promise.resolve(false),
                 options.functions.svn ? checkSvn(url) : Promise.resolve(false),
                 options.functions.hg ? checkHg(url) : Promise.resolve(false),
                 options.functions.env ? checkEnv(url) : Promise.resolve(false),
                 options.functions.ds_store ? checkDSStore(url) : Promise.resolve(false),
+                options.functions.thumbs_db ? checkThumbsDb(url) : Promise.resolve(false),
                 options.check_securitytxt ? checkSecuritytxt(url) : Promise.resolve(false),
                 options.functions.git && options.check_opensource ? isOpenSource(url) : Promise.resolve(false)
             ]);
 
-            debugLog('Check results:', { git, svn, hg, env, ds_store, securitytxt, opensource });
+            debugLog('Check results:', { git, svn, hg, env, ds_store, thumbs_db, securitytxt, opensource });
 
             const types = [];
             if (git) types.push('git');
@@ -317,6 +350,7 @@ if (typeof window.dotGitInjected === 'undefined') {
             if (hg) types.push('hg');
             if (env) types.push('env');
             if (ds_store) types.push('ds_store');
+            if (thumbs_db) types.push('thumbs_db');
 
             debugLog('Found types:', types);
 
@@ -347,6 +381,7 @@ if (typeof window.dotGitInjected === 'undefined') {
                 hg,
                 env,
                 ds_store,
+                thumbs_db,
                 securitytxt,
                 opensource
             };
@@ -358,6 +393,7 @@ if (typeof window.dotGitInjected === 'undefined') {
                 hg: false,
                 env: false,
                 ds_store: false,
+                thumbs_db: false,
                 securitytxt: false,
                 opensource: false,
                 error: error.message
@@ -385,6 +421,7 @@ if (typeof window.dotGitInjected === 'undefined') {
                     hg: false,
                     env: false,
                     ds_store: false,
+                    thumbs_db: false,
                     securitytxt: false,
                     opensource: false,
                     error: error.message
@@ -396,4 +433,4 @@ if (typeof window.dotGitInjected === 'undefined') {
     });
 
     debugLog('Content script setup complete');
-} 
+}
