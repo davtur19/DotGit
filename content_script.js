@@ -8,6 +8,7 @@ if (typeof window.dotGitInjected === 'undefined') {
             console.log('[DotGit]', ...args);
         }
     }
+
     debugLog("Content script initialized");
 
     // Content script for checking exposed Git repositories and sensitive files
@@ -45,17 +46,17 @@ if (typeof window.dotGitInjected === 'undefined') {
 
     // Helper function to make fetch requests with timeout
     async function fetchWithTimeout(resource, options = {}) {
-        const { timeout = 10000 } = options;
-        
+        const {timeout = 10000} = options;
+
         const controller = new AbortController();
         const id = setTimeout(() => controller.abort(), timeout);
-        
+
         const response = await fetch(resource, {
             ...options,
             signal: controller.signal
         });
         clearTimeout(id);
-        
+
         return response;
     }
 
@@ -63,25 +64,25 @@ if (typeof window.dotGitInjected === 'undefined') {
     async function checkGit(url) {
         const to_check = url + GIT_HEAD_PATH;
         const search = new RegExp(GIT_OBJECTS_SEARCH, "y");
-        
+
         try {
             debugLog('Checking Git HEAD:', to_check);
             const response = await fetchWithTimeout(to_check, {
                 redirect: "manual",
                 timeout: 10000
             });
-            
+
             debugLog('Response status:', response.status);
-            debugLog('Response headers:', response.headers && response.headers.get ? 
-                    'Headers available' : 'Headers not available');
-            
+            debugLog('Response headers:', response.headers && response.headers.get ?
+                'Headers available' : 'Headers not available');
+
             if (response.status === 200) {
                 const text = await response.text();
                 debugLog('Git HEAD content:', text);
                 debugLog('Content length:', text.length);
                 debugLog('Starts with header?', text.startsWith(GIT_HEAD_HEADER));
                 debugLog('Matches hash?', search.test(text));
-                
+
                 if (text.startsWith(GIT_HEAD_HEADER) || search.test(text)) {
                     debugLog('Git repository found!');
                     chrome.runtime.sendMessage({
@@ -97,7 +98,7 @@ if (typeof window.dotGitInjected === 'undefined') {
         } catch (error) {
             debugLog('Error checking Git:', error);
         }
-        
+
         debugLog('No Git repository found at:', to_check);
         return false;
     }
@@ -105,13 +106,13 @@ if (typeof window.dotGitInjected === 'undefined') {
     // Check for exposed SVN repository
     async function checkSvn(url) {
         const to_check = url + SVN_DB_PATH;
-        
+
         try {
             const response = await fetchWithTimeout(to_check, {
                 redirect: "manual",
                 timeout: 10000
             });
-            
+
             if (response.status === 200) {
                 const text = await response.text();
                 if (text.startsWith(SVN_DB_HEADER)) {
@@ -121,20 +122,20 @@ if (typeof window.dotGitInjected === 'undefined') {
         } catch (error) {
             // Ignore error
         }
-        
+
         return false;
     }
 
     // Check for exposed Mercurial repository
     async function checkHg(url) {
         const to_check = url + HG_MANIFEST_PATH;
-        
+
         try {
             const response = await fetchWithTimeout(to_check, {
                 redirect: "manual",
                 timeout: 10000
             });
-            
+
             if (response.status === 200) {
                 const text = await response.text();
                 if (HG_MANIFEST_HEADERS.some(header => text.startsWith(header))) {
@@ -144,7 +145,7 @@ if (typeof window.dotGitInjected === 'undefined') {
         } catch (error) {
             // Ignore error
         }
-        
+
         return false;
     }
 
@@ -152,13 +153,13 @@ if (typeof window.dotGitInjected === 'undefined') {
     async function checkEnv(url) {
         const to_check = url + ENV_PATH;
         const search = new RegExp(ENV_SEARCH, "g");
-        
+
         try {
             const response = await fetchWithTimeout(to_check, {
                 redirect: "manual",
                 timeout: 10000
             });
-            
+
             if (response.status === 200) {
                 const text = await response.text();
                 if (search.test(text)) {
@@ -168,20 +169,20 @@ if (typeof window.dotGitInjected === 'undefined') {
         } catch (error) {
             // Ignore error
         }
-        
+
         return false;
     }
 
     // Check for exposed .DS_Store file
     async function checkDSStore(url) {
         const to_check = url + DS_STORE;
-        
+
         try {
             const response = await fetchWithTimeout(to_check, {
                 redirect: "manual",
                 timeout: 10000
             });
-            
+
             if (response.status === 200) {
                 const text = await response.text();
                 if (text.startsWith(DS_STORE_HEADER)) {
@@ -191,7 +192,7 @@ if (typeof window.dotGitInjected === 'undefined') {
         } catch (error) {
             // Ignore error
         }
-        
+
         return false;
     }
 
@@ -200,13 +201,13 @@ if (typeof window.dotGitInjected === 'undefined') {
         for (const path of SECURITYTXT_PATHS) {
             const to_check = url + path;
             const search = new RegExp(SECURITYTXT_SEARCH);
-            
+
             try {
                 const response = await fetchWithTimeout(to_check, {
                     redirect: "manual",
                     timeout: 10000
                 });
-                
+
                 if (response.status === 200) {
                     const text = await response.text();
                     if (search.test(text)) {
@@ -297,19 +298,17 @@ if (typeof window.dotGitInjected === 'undefined') {
     async function checkSite(url, options) {
         try {
             debugLog('Starting site check for:', url);
-            
-            // Run all checks in parallel
-            const [git, svn, hg, env, ds_store, securitytxt, opensource] = await Promise.all([
+
+            // Run core checks in parallel
+            const [git, svn, hg, env, ds_store] = await Promise.all([
                 options.functions.git ? checkGit(url) : Promise.resolve(false),
                 options.functions.svn ? checkSvn(url) : Promise.resolve(false),
                 options.functions.hg ? checkHg(url) : Promise.resolve(false),
                 options.functions.env ? checkEnv(url) : Promise.resolve(false),
-                options.functions.ds_store ? checkDSStore(url) : Promise.resolve(false),
-                options.check_securitytxt ? checkSecuritytxt(url) : Promise.resolve(false),
-                options.functions.git && options.check_opensource ? isOpenSource(url) : Promise.resolve(false)
+                options.functions.ds_store ? checkDSStore(url) : Promise.resolve(false)
             ]);
 
-            debugLog('Check results:', { git, svn, hg, env, ds_store, securitytxt, opensource });
+            debugLog('Check results:', {git, svn, hg, env, ds_store});
 
             const types = [];
             if (git) types.push('git');
@@ -320,7 +319,16 @@ if (typeof window.dotGitInjected === 'undefined') {
 
             debugLog('Found types:', types);
 
+            // Enrichment checks (security.txt, opensource) only run after a
+            // real finding is detected, to avoid useless requests
+            let securitytxt = false;
+            let opensource = false;
             if (types.length > 0) {
+                [securitytxt, opensource] = await Promise.all([
+                    options.check_securitytxt ? checkSecuritytxt(url) : Promise.resolve(false),
+                    git && options.check_opensource ? isOpenSource(url) : Promise.resolve(false)
+                ]);
+
                 // Send each finding individually to ensure proper processing
                 for (const type of types) {
                     debugLog('Sending finding for type:', type);
@@ -368,12 +376,12 @@ if (typeof window.dotGitInjected === 'undefined') {
     // Listen for messages from the background script
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         debugLog('Received message:', request);
-        
+
         if (request.type === "CHECK_SITE") {
-            const { url, options } = request;
+            const {url, options} = request;
             debug = options.debug;
             debugLog('Checking site:', url, 'with options:', options);
-            
+
             // Run checks based on enabled options
             checkSite(url, options).then((results) => {
                 sendResponse(results);
@@ -390,7 +398,7 @@ if (typeof window.dotGitInjected === 'undefined') {
                     error: error.message
                 });
             });
-            
+
             return true; // Keep the message channel open for async response
         }
     });
