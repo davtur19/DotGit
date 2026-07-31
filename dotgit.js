@@ -89,6 +89,7 @@ let check_ds_store;
 let failed_in_a_row;
 let check_failed;
 let blacklist = [];
+let compiledBlacklist = [];
 let processingUrls = new Set();
 let debug = false;
 
@@ -182,10 +183,8 @@ async function setBadge() {
 
 function startDownload(baseUrl, downloadFinished) {
     const downloadedFiles = [];
-    const walkedPaths = [];
+    const walkedPaths = new Set();
 
-    let running_tasks = 0;
-    let waiting = 0;
     let fileExist = false;
     let downloadStats = {};
     let failedInARow = 0;
@@ -193,165 +192,200 @@ function startDownload(baseUrl, downloadFinished) {
         successful: 0,
         failed: 0,
         total: 0
-    }
+    };
 
-    // slow conversion
+    // FIFO queue + worker pool
+    const queue = [];
+    let active = 0;
+
+    // Reference counting for termination detection
+    let pendingCount = 0;
+    let zipTriggered = false;
+
     function arrayBufferToString(buffer) {
+        // Build a true latin-1 (1:1 byte->char) string. TextDecoder('iso-8859-1')
+        // is an alias for windows-1252, which remaps bytes 0x80-0x9F to multi-byte
+        // code points and corrupts raw SHA-1 bytes parsed by checkTree.
+        const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
         let result = "";
-
-        buffer.forEach(function (part) {
-            result += String.fromCharCode(part);
-        });
-
+        const chunkSize = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            result += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+        }
         return result;
     }
 
-    // make zip
     function downloadZip() {
-        if (running_tasks === 0 && waiting === 0) {
-            notification("Download status", "Creating zip...");
-            let zip = new JSZip();
-            let filename = baseUrl.replace(/^http(s?):\/\//i, "").replace(/[.:@]/g, "_");
-            let strStatus = STATUS_DESCRIPTION;
+        notification("Download status", "Creating zip...");
+        let zip = new JSZip();
+        let filename = baseUrl.replace(/^http(s?):\/\//i, "").replace(/[.:@]/g, "_");
+        let strStatus = STATUS_DESCRIPTION;
 
-            downloadedFiles.forEach(function (file) {
-                zip.file(filename + GIT_PATH + file[0], file[1], {arrayBuffer: true});
-            });
+        downloadedFiles.forEach(function (file) {
+            zip.file(filename + GIT_PATH + file[0], file[1], {arrayBuffer: true});
+        });
 
-            Object.keys(downloadStats).forEach(function (key) {
-                strStatus += "\n" + key + ": " + downloadStats[key];
-            });
-            zip.file("DownloadStats.txt", strStatus);
+        Object.keys(downloadStats).forEach(function (key) {
+            strStatus += "\n" + key + ": " + downloadStats[key];
+        });
+        zip.file("DownloadStats.txt", strStatus);
 
-            if (typeof URL.createObjectURL === 'function') {
-                // FireFox download
-                zip.generateAsync({type: "blob"}).then(function (zipBlob) {
-                    chrome.downloads.download({
-                        url: URL.createObjectURL(zipBlob),
-                        filename: `${filename}.zip`
-                    });
-                    downloadFinished(fileExist, downloadStats);
+        if (typeof URL.createObjectURL === 'function') {
+            // FireFox download
+            zip.generateAsync({type: "blob"}).then(function (zipBlob) {
+                chrome.downloads.download({
+                    url: URL.createObjectURL(zipBlob),
+                    filename: `${filename}.zip`
                 });
-            } else {
-                // Chrome download
-                zip.generateAsync({type: "base64"}).then(function (zipData) {
-                    chrome.downloads.download({
-                        url: `data:application/octet-stream;base64,${zipData}`,
-                        filename: `${filename}.zip`
-                    });
-                    downloadFinished(fileExist, downloadStats);
+                downloadFinished(fileExist, downloadStats);
+            });
+        } else {
+            // Chrome download
+            zip.generateAsync({type: "base64"}).then(function (zipData) {
+                chrome.downloads.download({
+                    url: `data:application/octet-stream;base64,${zipData}`,
+                    filename: `${filename}.zip`
                 });
-            }
+                downloadFinished(fileExist, downloadStats);
+            });
+        }
+    }
+
+    function tryTriggerZip() {
+        if (pendingCount === 0 && !zipTriggered) {
+            zipTriggered = true;
+            downloadZip();
         }
     }
 
 
-    function downloadFile(path, decompress, callback) {
-        if (walkedPaths.includes(path)) {
-            downloadZip();
+    function enqueue(path, decompress, callback) {
+        if (walkedPaths.has(path)) {
             return;
         }
         if (failedInARow > failed_in_a_row) {
-            downloadZip();
             return;
         }
+        walkedPaths.add(path);
+        pendingCount++;
+        downloadStatus.total++;
+        queue.push({path, decompress, callback});
+        drain();
+    }
 
-        // waiting = number of pending downloads
-        // running_tasks = number of downloads in progress
-        // max_connections = maximum number of simultaneous connections
-        // wait = wait time based on pending downloads
-        // max_wait = max wait time
-        if (running_tasks >= max_connections) {
-            waiting++;
-            setTimeout(function () {
-                waiting--;
-                downloadFile(path, decompress, callback);
-            }, ((waiting * wait) <= max_wait) ? (waiting * wait) : max_wait);
-        } else {
-            //download
-            walkedPaths.push(path);
-            running_tasks++;
-            downloadStatus.total++;
-
-            fetch(baseUrl + GIT_PATH + path, {
-                redirect: "manual",
-                headers: {"Accept": "text/html"},
-            }).then(function (response) {
-                downloadStats[response.status] = (typeof downloadStats[response.status] === "undefined") ? 1 : downloadStats[response.status] + 1;
-                // ignore status code?
-                if (response.ok && response.status === 200) {
-                    fileExist = true;
-                    downloadStatus.successful++;
-                    failedInARow = 0;
-                    sendDownloadStatus(baseUrl, downloadStatus);
-                    return response.arrayBuffer();
-                }
-                running_tasks--;
-                downloadStatus.failed++;
-                failedInARow++;
-                sendDownloadStatus(baseUrl, downloadStatus);
-            }).then(function (buffer) {
-                if (typeof buffer !== "undefined") {
-                    downloadedFiles.push([path, buffer]);
-                    // noinspection JSCheckFunctionSignatures
-                    const words = new Uint8Array(buffer);
-
-                    if (decompress) {
-                        // decompress objects
-                        try {
-                            let data = pako.ungzip(words);
-                            callback(arrayBufferToString(data));
-                        } catch (e) {
-                            // do nothing
-                        }
-                    } else {
-                        // plaintext file
-                        callback(arrayBufferToString(words));
-                    }
-                    running_tasks--;
-                }
-                downloadZip();
-            });
+    function drain() {
+        while (active < max_connections && queue.length > 0) {
+            const job = queue.shift();
+            active++;
+            processJob(job);
         }
+    }
+
+    function processJob({path, decompress, callback}) {
+        fetch(baseUrl + GIT_PATH + path, {
+            redirect: "manual",
+            headers: {"Accept": "text/html"},
+        }).then(function (response) {
+            downloadStats[response.status] = (typeof downloadStats[response.status] === "undefined") ? 1 : downloadStats[response.status] + 1;
+            if (response.ok && response.status === 200) {
+                fileExist = true;
+                downloadStatus.successful++;
+                failedInARow = 0;
+                sendDownloadStatus(baseUrl, downloadStatus);
+                return response.arrayBuffer();
+            }
+            downloadStatus.failed++;
+            failedInARow++;
+            sendDownloadStatus(baseUrl, downloadStatus);
+        }).then(function (buffer) {
+            if (typeof buffer !== "undefined") {
+                downloadedFiles.push([path, buffer]);
+                // noinspection JSCheckFunctionSignatures
+                const words = new Uint8Array(buffer);
+
+                if (decompress) {
+                    try {
+                        let data = pako.ungzip(words);
+                        callback(arrayBufferToString(data));
+                    } catch (e) {
+                        // do nothing
+                    }
+                } else {
+                    callback(arrayBufferToString(words));
+                }
+            }
+        }).finally(function () {
+            active--;
+            pendingCount--;
+            tryTriggerZip();
+            drain();
+        });
     }
 
 
     function checkTree(result) {
-        if (result.startsWith(GIT_TREE_HEADER)) {
-            for (let i = 0; i < result.length; i++) {
-                if (result[i] === GIT_BLOB_DELIMITER && i + 1 + SHA1_SIZE <= result.length) {
-                    let hash = "";
+        if (!result.startsWith(GIT_TREE_HEADER)) return;
 
-                    for (let j = i + 1; j < i + 1 + SHA1_SIZE; j++) {
-                        // bin to hex
-                        let chr = result.charCodeAt(j).toString(16);
-                        hash += chr.length < 2 ? "0" + chr : chr;
-                    }
+        // Skip "tree <size>\0" header
+        let pos = result.indexOf(GIT_BLOB_DELIMITER);
+        if (pos === -1) return;
+        pos++;
 
-                    // make an object path and download
-                    let path = GIT_OBJECTS_PATH + hash.slice(0, 2) + "/" + hash.slice(2);
-                    downloadFile(path, true, checkResult);
-                }
+        while (pos < result.length) {
+            // Read mode (until space)
+            const spaceIdx = result.indexOf(' ', pos);
+            if (spaceIdx === -1) break;
+            pos = spaceIdx + 1;
+
+            // Read name (until \0)
+            const nullIdx = result.indexOf(GIT_BLOB_DELIMITER, pos);
+            if (nullIdx === -1) break;
+            pos = nullIdx + 1;
+
+            // Read exactly 20 bytes of SHA-1
+            if (pos + SHA1_SIZE > result.length) break;
+            let hash = "";
+            for (let j = pos; j < pos + SHA1_SIZE; j++) {
+                const chr = result.charCodeAt(j).toString(16);
+                hash += chr.length < 2 ? "0" + chr : chr;
             }
+            pos += SHA1_SIZE;
+
+            const path = GIT_OBJECTS_PATH + hash.slice(0, 2) + "/" + hash.slice(2);
+            enqueue(path, true, checkResult);
         }
     }
 
 
     function checkObject(result) {
-        let matches;
-        const search = new RegExp(GIT_OBJECTS_SEARCH, "g");
-
-        while ((matches = search.exec(result)) !== null) {
-            // This is necessary to avoid infinite loops with zero-width matches
-            if (matches.index === search.lastIndex) {
-                search.lastIndex++;
+        if (result.startsWith('commit ')) {
+            // Parse commit object: only extract tree and parent hashes
+            const headerEnd = result.indexOf(GIT_BLOB_DELIMITER);
+            if (headerEnd === -1) return;
+            const body = result.substring(headerEnd + 1);
+            const lines = body.split('\n');
+            for (const line of lines) {
+                if (line === '') break;
+                const match = line.match(/^(tree|parent) ([a-f0-9]{40})$/);
+                if (match) {
+                    const path = GIT_OBJECTS_PATH + match[2].slice(0, 2) + "/" + match[2].slice(2);
+                    enqueue(path, true, checkResult);
+                }
             }
-
-
-            for (let i = 0; i < matches.length; i++) {
-                // make an object path and download
-                let path = GIT_OBJECTS_PATH + matches[i].slice(0, 2) + "/" + matches[i].slice(2);
-                downloadFile(path, true, checkResult);
+        } else if (result.startsWith('blob ')) {
+            // Skip blob objects to avoid false positive matches
+            return;
+        } else {
+            // For other text-based content (packed-refs, logs, tags), parse line-by-line
+            const lines = result.split('\n');
+            const hashRegex = /[a-f0-9]{40}/g;
+            for (const line of lines) {
+                let match;
+                while ((match = hashRegex.exec(line)) !== null) {
+                    const path = GIT_OBJECTS_PATH + match[0].slice(0, 2) + "/" + match[0].slice(2);
+                    enqueue(path, true, checkResult);
+                }
+                hashRegex.lastIndex = 0;
             }
         }
     }
@@ -370,9 +404,9 @@ function startDownload(baseUrl, downloadFinished) {
             for (let i = 0; i < matches.length; i++) {
                 let pathExt = GIT_PACK_PATH + matches[i] + GIT_PACK_EXT;
                 let pathIdx = GIT_PACK_PATH + matches[i] + GIT_IDX_EXT;
-                downloadFile(pathExt, false, function () {
+                enqueue(pathExt, false, function () {
                 });
-                downloadFile(pathIdx, false, function () {
+                enqueue(pathIdx, false, function () {
                 });
             }
         }
@@ -387,10 +421,18 @@ function startDownload(baseUrl, downloadFinished) {
 
     // start download from well know paths
     for (let i = 0; i < GIT_WELL_KNOW_PATHS.length; i++) {
-        downloadFile(GIT_WELL_KNOW_PATHS[i], false, checkResult);
+        enqueue(GIT_WELL_KNOW_PATHS[i], false, checkResult);
     }
 }
 
+
+function compileBlacklist(list) {
+    return list.map(function (b) {
+        const splits = b.split('*');
+        const parts = splits.map(function (el) { return escapeRegExp(el); });
+        return new RegExp(parts.join('.*'));
+    });
+}
 
 function set_options(options) {
     wait = options.download.wait;
@@ -409,6 +451,7 @@ function set_options(options) {
     debug = options.debug;
     check_failed = options.check_failed;
     blacklist = options.blacklist;
+    compiledBlacklist = compileBlacklist(blacklist);
 }
 
 
@@ -518,15 +561,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const {origin} = msg;
         chrome.storage.local.get(["options", "checked"], async (result) => {
             const options = result.options || DEFAULT_OPTIONS;
-            const alreadyChecked = result.checked || [];
+            const alreadyChecked = new Set(result.checked || []);
 
-            if (!options.functions.git || alreadyChecked.includes(origin)) {
+            if (!options.functions.git || alreadyChecked.has(origin)) {
                 sendResponse({shouldFetch: false});
                 return;
             }
 
-            alreadyChecked.push(origin);
-            await chrome.storage.local.set({checked: alreadyChecked});
+            alreadyChecked.add(origin);
+            await chrome.storage.local.set({checked: [...alreadyChecked]});
             sendResponse({shouldFetch: true});
         });
         return true;
@@ -548,7 +591,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         'wait': () => wait = msg.value,
         'max_wait': () => max_wait = msg.value,
         'failed_in_a_row': () => failed_in_a_row = msg.value,
-        'blacklist': () => blacklist = msg.value
+        'blacklist': () => { blacklist = msg.value; compiledBlacklist = compileBlacklist(blacklist); }
     };
 
     if (optionHandlers[msg.type]) {
@@ -677,14 +720,14 @@ async function processListener(details) {
 
         const result = await chrome.storage.local.get(["checked", "options"]);
         const options = result.options || DEFAULT_OPTIONS;
-        const alreadyChecked = result.checked || [];
+        const alreadyChecked = new Set(result.checked || []);
 
-        if (alreadyChecked.includes(origin) || checkBlacklist(new URL(origin).hostname)) {
+        if (alreadyChecked.has(origin) || checkBlacklist(new URL(origin).hostname)) {
             return;
         }
 
-        alreadyChecked.push(origin);
-        await chrome.storage.local.set({checked: alreadyChecked});
+        alreadyChecked.add(origin);
+        await chrome.storage.local.set({checked: [...alreadyChecked]});
 
         // Wait for the tab to be fully loaded
         const tabReady = await new Promise((resolve) => {
@@ -735,15 +778,9 @@ async function processListener(details) {
 
 
 function checkBlacklist(hostname) {
-    for (const b of blacklist) {
-        let splits = b.split('*');
-        if (splits[1] !== "undefined") {
-            let parts = [];
-            splits.forEach(el => parts.push(escapeRegExp(el)));
-            let re = new RegExp(parts.join('.*'));
-            if (re.test(hostname) === true) {
-                return true;
-            }
+    for (const re of compiledBlacklist) {
+        if (re.test(hostname)) {
+            return true;
         }
     }
     return false;
