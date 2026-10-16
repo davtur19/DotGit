@@ -474,12 +474,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                                         ? `Found at: ${newFindings[0].findingUrl}`
                                         : newFindings.map(f => `${f.type}: ${f.findingUrl}`).join('\n');
 
-                        chrome.notifications.create({
-                            type: "basic",
-                            iconUrl: chrome.runtime.getURL(EXTENSION_ICON["48"]),
-                            title: title,
-                            message: message
-                        });
+                        notification(title, message);
                     }
                 }
 
