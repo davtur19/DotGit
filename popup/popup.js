@@ -36,9 +36,6 @@ document.addEventListener("DOMContentLoaded", function () {
         for (let n = 0; n < list.length; ++n) {
             list[n].className += " " + color;
         }
-        let max_sites = options.options.max_sites
-        let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
-        hostElementFoundTitle.textContent = "Total found: 0 Max shown: " + max_sites;
     });
 });
 
@@ -249,6 +246,8 @@ document.addEventListener("click", async (event) => {
 
 document.addEventListener("DOMContentLoaded", function () {
     chrome.storage.local.get(["withExposedGit", "downloading", "options"], function (visitedSite) {
+        document.getElementById("hostsFoundTitle").textContent =
+            "Total found: 0 Max shown: " + visitedSite.options.max_sites;
         if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
             let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
             let max_sites = visitedSite.options.max_sites
@@ -356,15 +355,4 @@ document.addEventListener("DOMContentLoaded", async function () {
         // On Chrome, hide the banner by default
         document.getElementById('permissions-banner').style.display = 'none';
     }
-
-    chrome.storage.local.get(["options"], function (options) {
-        let color = options.options.color;
-        let list = document.getElementsByClassName("custom-color");
-        for (let n = 0; n < list.length; ++n) {
-            list[n].className += " " + color;
-        }
-        let max_sites = options.options.max_sites
-        let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
-        hostElementFoundTitle.textContent = "Total found: 0 Max shown: " + max_sites;
-    });
 });
