@@ -901,8 +901,11 @@ function escapeRegExp(string) {
 
 // Add listener for installation
 chrome.runtime.onInstalled.addListener(async (details) => {
-    if (details.reason === 'install' || details.reason === 'update') {
-        debugLog('Extension installed/updated');
+    // Only a fresh installation starts from an empty state. Updates keep the
+    // findings and the settings: resetting them on every release was a leftover
+    // of an old schema migration.
+    if (details.reason === 'install') {
+        debugLog('Extension installed');
 
         await chrome.storage.local.set({
             checked: [],
