@@ -468,12 +468,28 @@ function set_options(options) {
 }
 
 
+function isPlainObject(value) {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+
 function checkOptions(default_options, storage_options) {
-    for (let [key] of Object.entries(default_options)) {
-        if (typeof storage_options[key] === "object") {
-            storage_options[key] = checkOptions(default_options[key], storage_options[key]);
-        } else if (typeof storage_options[key] === "undefined") {
-            storage_options[key] = default_options[key];
+    // Storage can be missing, null or contain a value of the wrong type (old
+    // versions, manual edits): rebuild that branch from the defaults instead of
+    // throwing on it.
+    if (!isPlainObject(storage_options)) {
+        storage_options = {};
+    }
+    for (const [key, defaultValue] of Object.entries(default_options)) {
+        const value = storage_options[key];
+        if (isPlainObject(defaultValue)) {
+            storage_options[key] = checkOptions(defaultValue, value);
+        } else if (Array.isArray(defaultValue)) {
+            if (!Array.isArray(value)) {
+                storage_options[key] = defaultValue.slice();
+            }
+        } else if (typeof value === "undefined") {
+            storage_options[key] = defaultValue;
         }
     }
     return storage_options;
@@ -483,12 +499,19 @@ function checkOptions(default_options, storage_options) {
 // not the same as a disabled one (undefined is falsy), so the merged object is
 // only persisted when something was really absent.
 function needsOptionsDefaults(default_options, storage_options) {
-    for (const [key, value] of Object.entries(default_options)) {
-        if (typeof storage_options[key] === "undefined") {
+    if (!isPlainObject(storage_options)) {
+        return true;
+    }
+    for (const [key, defaultValue] of Object.entries(default_options)) {
+        const value = storage_options[key];
+        if (typeof value === "undefined") {
             return true;
         }
-        if (value !== null && typeof value === "object" && !Array.isArray(value) &&
-            needsOptionsDefaults(value, storage_options[key])) {
+        if (isPlainObject(defaultValue)) {
+            if (!isPlainObject(value) || needsOptionsDefaults(defaultValue, value)) {
+                return true;
+            }
+        } else if (Array.isArray(defaultValue) && !Array.isArray(value)) {
             return true;
         }
     }
@@ -708,40 +731,52 @@ chrome.webRequest.onHeadersReceived.addListener(
 );
 
 
-chrome.storage.local.get(["checked", "withExposedGit", "options"], function (result) {
-    // Initialize the saved stats if not yet initialized.
-    if (typeof result.checked === "undefined") {
-        result = {
-            checked: [],
-            withExposedGit: []
-        };
-        chrome.storage.local.set(result);
+// Bring the persisted state in line with this version. Kept as a named function
+// so the migration can be exercised directly in tests.
+function initStorage(result) {
+    // Tolerate missing or corrupted keys: this can be an upgrade from a much
+    // older version, or storage edited by hand.
+    const checked = Array.isArray(result.checked) ? result.checked : [];
+    const withExposedGit = Array.isArray(result.withExposedGit) ? result.withExposedGit : [];
+    const storedOptions = isPlainObject(result.options) ? result.options : null;
+
+    if (!Array.isArray(result.checked)) {
+        chrome.storage.local.set({checked: checked});
     }
-    if (typeof result.options === "undefined") {
-        result.options = DEFAULT_OPTIONS;
+    if (!Array.isArray(result.withExposedGit)) {
+        chrome.storage.local.set({withExposedGit: withExposedGit});
+    }
+    if (!storedOptions) {
         chrome.storage.local.set({options: DEFAULT_OPTIONS});
     }
-    // upgrade 3.7.4 => 4.0
-    if (typeof result.options.functions === "undefined" || (typeof result.withExposedGit[0] !== "undefined" && typeof result.withExposedGit[0].type === "undefined")) {
-        let urls = [];
-        result.options.functions = DEFAULT_OPTIONS.functions;
-        result.withExposedGit.forEach(function (url) {
-            urls.push({type: "git", url: url});
-        });
-        result.withExposedGit = urls;
-        chrome.storage.local.set({withExposedGit: result.withExposedGit});
-    }
+
+    const options = storedOptions || DEFAULT_OPTIONS;
 
     // Write the merged options back only when keys were really missing: on
     // update onInstalled resets them, and an unconditional write here used to
-    // restore the old values after the reset.
-    const optionsWereIncomplete = needsOptionsDefaults(DEFAULT_OPTIONS, result.options);
-    const mergedOptions = checkOptions(DEFAULT_OPTIONS, result.options);
+    // restore the old values after the reset. Computed before the migration,
+    // which repairs `functions` in memory and may make the object look complete.
+    const optionsWereIncomplete = needsOptionsDefaults(DEFAULT_OPTIONS, options);
+
+    // upgrade 3.7.4 => 4.0: options had no `functions` and every finding was a
+    // bare URL string. Only wrap the strings, so a mixed list is not wrapped
+    // twice.
+    if (!isPlainObject(options.functions) || withExposedGit.some((entry) => typeof entry === "string")) {
+        options.functions = checkOptions(DEFAULT_OPTIONS.functions, options.functions);
+        const migrated = withExposedGit.map((entry) =>
+            typeof entry === "string" ? {type: "git", url: entry} : entry);
+        chrome.storage.local.set({withExposedGit: migrated});
+    }
+
+    const mergedOptions = checkOptions(DEFAULT_OPTIONS, options);
     if (optionsWereIncomplete) {
         chrome.storage.local.set({options: mergedOptions});
     }
     set_options(mergedOptions);
-});
+}
+
+
+chrome.storage.local.get(["checked", "withExposedGit", "options"], initStorage);
 
 // Reset download status at each start
 chrome.storage.local.set({

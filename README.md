@@ -31,7 +31,7 @@ counted as a network error, so a dead server cannot keep the download open forev
   memory usable by extensions, and DotGit does everything in RAM)
 - Changing the download settings is recommended as by default the values are kept low to avoid problems for those who do
   not have a good connection or a good CPU, however too high values could freeze the browser even on powerful computers
-- By default, svn, mercurial and dotenv are disabled, to activate them just go to settings and turn them on
+- By default, svn, mercurial, dotenv and .DS_Store are disabled, to activate them just go to settings and turn them on
 
 ## Screenshot
 

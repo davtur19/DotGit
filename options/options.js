@@ -1,42 +1,52 @@
 function set_gui(options) {
+    // The page can load before the background has merged the defaults into an
+    // older options object: never assume the nested keys exist.
+    const functions = options.functions || {};
+    const download = options.download || {};
+    const notification = options.notification || {};
+
     let colors = document.getElementById("color");
     for (let i = 0; i < colors.length; i++) {
         if (colors.options[i].value === options.color) {
             document.getElementById("color").selectedIndex = i;
         }
     }
-    document.getElementById("gitOn").checked = options.functions.git;
-    document.getElementById("gitOff").checked = !options.functions.git;
-    document.getElementById("svnOn").checked = options.functions.svn;
-    document.getElementById("svnOff").checked = !options.functions.svn;
-    document.getElementById("hgOn").checked = options.functions.hg;
-    document.getElementById("hgOff").checked = !options.functions.hg;
-    document.getElementById("envOn").checked = options.functions.env;
-    document.getElementById("envOff").checked = !options.functions.env;
-    document.getElementById("ds_storeOn").checked = options.functions.ds_store;
-    document.getElementById("ds_storeOff").checked = !options.functions.ds_store;
-    document.getElementById("debugOn").checked = options.debug;
+    document.getElementById("gitOn").checked = !!functions.git;
+    document.getElementById("gitOff").checked = !functions.git;
+    document.getElementById("svnOn").checked = !!functions.svn;
+    document.getElementById("svnOff").checked = !functions.svn;
+    document.getElementById("hgOn").checked = !!functions.hg;
+    document.getElementById("hgOff").checked = !functions.hg;
+    document.getElementById("envOn").checked = !!functions.env;
+    document.getElementById("envOff").checked = !functions.env;
+    document.getElementById("ds_storeOn").checked = !!functions.ds_store;
+    document.getElementById("ds_storeOff").checked = !functions.ds_store;
+    document.getElementById("debugOn").checked = !!options.debug;
     document.getElementById("debugOff").checked = !options.debug;
-    document.getElementById("checkFailedOn").checked = options.check_failed;
+    document.getElementById("checkFailedOn").checked = !!options.check_failed;
     document.getElementById("checkFailedOff").checked = !options.check_failed;
     document.getElementById("max_sites").value = options.max_sites;
-    document.getElementById("max_connections").value = options.download.max_connections;
-    document.getElementById("failed_in_a_row").value = options.download.failed_in_a_row;
-    document.getElementById("on1").checked = options.notification.new_git;
-    document.getElementById("off1").checked = !options.notification.new_git;
-    document.getElementById("on2").checked = options.notification.download;
-    document.getElementById("off2").checked = !options.notification.download;
-    document.getElementById("on3").checked = options.check_opensource;
+    document.getElementById("max_connections").value = download.max_connections;
+    document.getElementById("failed_in_a_row").value = download.failed_in_a_row;
+    document.getElementById("on1").checked = !!notification.new_git;
+    document.getElementById("off1").checked = !notification.new_git;
+    document.getElementById("on2").checked = !!notification.download;
+    document.getElementById("off2").checked = !notification.download;
+    document.getElementById("on3").checked = !!options.check_opensource;
     document.getElementById("off3").checked = !options.check_opensource;
-    document.getElementById("on4").checked = options.check_securitytxt;
+    document.getElementById("on4").checked = !!options.check_securitytxt;
     document.getElementById("off4").checked = !options.check_securitytxt;
-    document.getElementById("blacklist").value = options.blacklist.join(", ");
+    document.getElementById("blacklist").value = (options.blacklist || []).join(", ");
 }
 
 document.addEventListener("DOMContentLoaded", function () {
     chrome.storage.local.get(["options"], function (result) {
         // The page can load before the background has written the defaults.
         if (!result.options) return;
+        // Nested keys can be missing when upgrading from an older version.
+        result.options.functions = result.options.functions || {};
+        result.options.download = result.options.download || {};
+        result.options.notification = result.options.notification || {};
         set_gui(result.options);
 
         document.addEventListener("change", (e) => {
