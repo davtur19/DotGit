@@ -816,8 +816,10 @@ async function processListener(details) {
             return;
         }
 
-        const {options = DEFAULT_OPTIONS} =
-            await chrome.storage.local.get(["options"]);
+        const stored = await chrome.storage.local.get(["options"]);
+        // A partial options object (older install, failed write) must not
+        // silently disable every check: fill in whatever is missing.
+        const options = checkOptions(DEFAULT_OPTIONS, stored.options || {});
 
         const isContentScriptAvailable = await new Promise(resolve => {
             chrome.tabs.sendMessage(tab.id, {type: "PING"}, response => {

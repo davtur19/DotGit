@@ -84,7 +84,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 result.options.color = e.target.value;
                 chrome.storage.local.set(result);
             } else if (e.target.validity.valid === true && (e.target.id === "max_sites")) {
-                result.options.max_sites = e.target.value;
+                result.options.max_sites = Number(e.target.value);
                 chrome.storage.local.set(result);
             } else if (e.target.name === "notification_new_git") {
                 result.options.notification.new_git = (e.target.value === "on");
@@ -135,11 +135,11 @@ document.addEventListener("DOMContentLoaded", function () {
                 }, function (response) {
                 });
             } else if (e.target.validity.valid === true && (e.target.id === "max_connections" || e.target.id === "wait" || e.target.id === "max_wait" || e.target.id === "failed_in_a_row")) {
-                result.options.download[e.target.id] = e.target.value;
+                result.options.download[e.target.id] = Number(e.target.value);
                 chrome.storage.local.set(result);
                 chrome.runtime.sendMessage({
                     type: e.target.id,
-                    value: e.target.value
+                    value: result.options.download[e.target.id]
                 }, function (response) {
                 });
             } else if (e.target.id === "blacklist") {

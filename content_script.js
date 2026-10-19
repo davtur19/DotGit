@@ -51,13 +51,14 @@ if (typeof window.dotGitInjected === 'undefined') {
         const controller = new AbortController();
         const id = setTimeout(() => controller.abort(), timeout);
 
-        const response = await fetch(resource, {
-            ...options,
-            signal: controller.signal
-        });
-        clearTimeout(id);
-
-        return response;
+        try {
+            return await fetch(resource, {
+                ...options,
+                signal: controller.signal
+            });
+        } finally {
+            clearTimeout(id);
+        }
     }
 
     // Check for exposed Git repository
@@ -85,10 +86,6 @@ if (typeof window.dotGitInjected === 'undefined') {
 
                 if (text.startsWith(GIT_HEAD_HEADER) || search.test(text)) {
                     debugLog('Git repository found!');
-                    chrome.runtime.sendMessage({
-                        type: "GIT_FOUND",
-                        url: url
-                    });
                     return true;
                 }
                 debugLog('Content does not match Git patterns');

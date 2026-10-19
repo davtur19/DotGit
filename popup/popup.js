@@ -34,6 +34,7 @@ if (typeof chrome.browserAction !== "undefined" && typeof chrome.browserAction.s
 
 document.addEventListener("DOMContentLoaded", function () {
     chrome.storage.local.get(["options"], function (options) {
+        if (!options.options) return;
         let color = options.options.color;
         let list = document.getElementsByClassName("custom-color");
         for (let n = 0; n < list.length; ++n) {
@@ -266,11 +267,13 @@ document.addEventListener("click", async (event) => {
 
 document.addEventListener("DOMContentLoaded", function () {
     chrome.storage.local.get(["withExposedGit", "downloading", "options"], function (visitedSite) {
+        if (!visitedSite.options) return;
+        const maxSites = visitedSite.options.max_sites;
         document.getElementById("hostsFoundTitle").textContent =
-            "Total found: 0 Max shown: " + visitedSite.options.max_sites;
+            "Total found: 0 Max shown: " + maxSites;
         if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
             let hostElementFoundTitle = document.getElementById("hostsFoundTitle");
-            let max_sites = visitedSite.options.max_sites
+            let max_sites = maxSites;
             hostElementFoundTitle.textContent = "Total found: " + visitedSite.withExposedGit.length + " Max shown: " + max_sites;
 
             let hostElementFound = document.getElementById("hostsFound");
@@ -319,7 +322,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     statusElement.innerText = downloadStatusArr.join("/");
 
     sendResponse({status: true});
-    return true;
+    return false;
 });
 
 async function checkPermissions() {
