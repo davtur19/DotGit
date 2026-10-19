@@ -310,8 +310,7 @@ function startDownload(baseUrl, downloadFinished) {
 
     function processJob({path, decompress, callback}) {
         fetch(baseUrl + GIT_PATH + path, {
-            redirect: "manual",
-            headers: {"Accept": "text/html"},
+            redirect: "manual"
         }).then(function (response) {
             downloadStats[response.status] = (typeof downloadStats[response.status] === "undefined") ? 1 : downloadStats[response.status] + 1;
             if (response.ok && response.status === 200) {
@@ -341,6 +340,13 @@ function startDownload(baseUrl, downloadFinished) {
                     callback(arrayBufferToString(words));
                 }
             }
+        }).catch(function (error) {
+            // Network error (offline, DNS, aborted...): no HTTP status to count.
+            downloadStats.network_error = (downloadStats.network_error || 0) + 1;
+            downloadStatus.failed++;
+            failedInARow++;
+            sendDownloadStatus(baseUrl, downloadStatus);
+            debugLog('Download failed:', path, error);
         }).finally(function () {
             active--;
             pendingCount--;
