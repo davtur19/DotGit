@@ -243,7 +243,12 @@ if (typeof window.dotGitInjected === 'undefined') {
     // the one that probes github/gitlab.
     async function checkOpenSource(url) {
         return new Promise((resolve) => {
+            // A background that never answers must not hold the whole scan: the
+            // probe is only an icon, report the finding without it. Five seconds
+            // more than the background abort, so a slow answer still arrives.
+            const timer = setTimeout(() => resolve(false), 35000);
             chrome.runtime.sendMessage({type: "CHECK_OPEN_SOURCE", url: url}, function (response) {
+                clearTimeout(timer);
                 void chrome.runtime.lastError;
                 resolve(response && response.open === true ? url : false);
             });

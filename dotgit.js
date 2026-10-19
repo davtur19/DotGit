@@ -658,8 +658,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                     sendResponse({open: false});
                     return;
                 }
-                const response = await fetch(target.href, {redirect: "follow"});
-                sendResponse({open: response.status === 200});
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 30000);
+                try {
+                    const response = await fetch(target.href, {
+                        redirect: "follow",
+                        signal: controller.signal
+                    });
+                    sendResponse({open: response.status === 200});
+                } finally {
+                    clearTimeout(timer);
+                }
             } catch (error) {
                 debugLog('Open source check failed:', error);
                 sendResponse({open: false});
