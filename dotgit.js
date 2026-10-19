@@ -127,37 +127,14 @@ function debugLog(...args) {
 }
 debugLog('Background script loaded');
 
-// Firefox persistence mechanism for Manifest V3
-let isWorkerActive = true;
-
-// Keep worker alive with periodic activity
-const keepAlive = setInterval(() => {
-    if (!isWorkerActive) {
-        clearInterval(keepAlive);
-        return;
-    }
-    
-    // Perform a minimal operation to keep the worker active
-    chrome.storage.local.get(['lastActivity'], (result) => {
-        chrome.storage.local.set({ lastActivity: Date.now() });
-    });
-}, 25000); // Every 25 seconds
-
-// Handle extension lifecycle events
+// Firefox starts the event page at browser startup so the top-level webRequest
+// listeners below are registered (and persisted) again for the new session.
 chrome.runtime.onStartup.addListener(() => {
     debugLog('Extension started');
-    isWorkerActive = true;
 });
 
-chrome.runtime.onInstalled.addListener((details) => {
-    debugLog('Extension installed/updated:', details.reason);
-    isWorkerActive = true;
-});
-
-// Handle when Firefox suspends the worker
 chrome.runtime.onSuspend.addListener(() => {
     debugLog('Service worker suspended');
-    isWorkerActive = false;
 });
 
 function notification(title, message) {
