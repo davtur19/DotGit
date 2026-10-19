@@ -22,10 +22,8 @@ _Some checks are turned off by default, open the settings to turn them on_
 ## How the download works
 
 There is a queue for downloads, with a **maximum of simultaneous connections**; if this number is exceeded, subsequent
-files are put on **wait** for X ms multiplied by the number of downloads already pending; the result of the
-multiplication cannot exceed the **maximum wait**
-
-More info [here](https://github.com/davtur19/DotGit/blob/b0f589dfd78396990b8d17e4268bd68471b4ff53/dotgit.js#L180-L192)
+files are queued and started as soon as a connection is free. A request that does not answer within 30 seconds is
+counted as a network error, so a dead server cannot keep the download open forever.
 
 ### Note:
 

@@ -69,7 +69,6 @@ if (typeof window.dotGitInjected === 'undefined') {
         try {
             debugLog('Checking Git HEAD:', to_check);
             const response = await fetchWithTimeout(to_check, {
-                redirect: "manual",
                 timeout: 10000
             });
 
@@ -106,7 +105,6 @@ if (typeof window.dotGitInjected === 'undefined') {
 
         try {
             const response = await fetchWithTimeout(to_check, {
-                redirect: "manual",
                 timeout: 10000
             });
 
@@ -129,7 +127,6 @@ if (typeof window.dotGitInjected === 'undefined') {
 
         try {
             const response = await fetchWithTimeout(to_check, {
-                redirect: "manual",
                 timeout: 10000
             });
 
@@ -153,7 +150,6 @@ if (typeof window.dotGitInjected === 'undefined') {
 
         try {
             const response = await fetchWithTimeout(to_check, {
-                redirect: "manual",
                 timeout: 10000
             });
 
@@ -176,7 +172,6 @@ if (typeof window.dotGitInjected === 'undefined') {
 
         try {
             const response = await fetchWithTimeout(to_check, {
-                redirect: "manual",
                 timeout: 10000
             });
 
@@ -201,7 +196,6 @@ if (typeof window.dotGitInjected === 'undefined') {
 
             try {
                 const response = await fetchWithTimeout(to_check, {
-                    redirect: "manual",
                     timeout: 10000
                 });
 
@@ -225,7 +219,6 @@ if (typeof window.dotGitInjected === 'undefined') {
 
         try {
             const response = await fetchWithTimeout(to_check, {
-                redirect: "manual",
                 timeout: 10000
             });
 

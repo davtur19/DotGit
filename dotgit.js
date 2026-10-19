@@ -282,9 +282,11 @@ function startDownload(baseUrl, downloadFinished) {
     }
 
     function processJob({path, decompress, callback}) {
-        fetch(baseUrl + GIT_PATH + path, {
-            redirect: "manual"
-        }).then(function (response) {
+        // A server that accepts the connection and never answers used to keep the
+        // whole download (and the popup button) open forever.
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 30000);
+        fetch(baseUrl + GIT_PATH + path, {signal: controller.signal}).then(function (response) {
             downloadStats[response.status] = (typeof downloadStats[response.status] === "undefined") ? 1 : downloadStats[response.status] + 1;
             if (response.ok && response.status === 200) {
                 fileExist = true;
@@ -321,6 +323,9 @@ function startDownload(baseUrl, downloadFinished) {
             sendDownloadStatus(baseUrl, downloadStatus);
             debugLog('Download failed:', path, error);
         }).finally(function () {
+            // Covers the body too: the abort must stay armed until arrayBuffer()
+            // has settled.
+            clearTimeout(timer);
             active--;
             pendingCount--;
             tryTriggerZip();
