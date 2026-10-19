@@ -37,6 +37,8 @@ function set_gui(options) {
 
 document.addEventListener("DOMContentLoaded", function () {
     chrome.storage.local.get(["options"], function (result) {
+        // The page can load before the background has written the defaults.
+        if (!result.options) return;
         set_gui(result.options);
 
         document.addEventListener("change", (e) => {

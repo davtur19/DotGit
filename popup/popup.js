@@ -267,8 +267,9 @@ document.addEventListener("click", async (event) => {
 
 document.addEventListener("DOMContentLoaded", function () {
     chrome.storage.local.get(["withExposedGit", "downloading", "options"], function (visitedSite) {
-        if (!visitedSite.options) return;
-        const maxSites = visitedSite.options.max_sites;
+        // Do not skip rendering when options are not written yet: the popup can
+        // open before the background has initialised them.
+        const maxSites = visitedSite.options?.max_sites ?? 100;
         document.getElementById("hostsFoundTitle").textContent =
             "Total found: 0 Max shown: " + maxSites;
         if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
