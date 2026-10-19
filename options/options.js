@@ -22,8 +22,6 @@ function set_gui(options) {
     document.getElementById("max_sites").value = options.max_sites;
     document.getElementById("max_connections").value = options.download.max_connections;
     document.getElementById("failed_in_a_row").value = options.download.failed_in_a_row;
-    document.getElementById("wait").value = options.download.wait;
-    document.getElementById("max_wait").value = options.download.max_wait;
     document.getElementById("on1").checked = options.notification.new_git;
     document.getElementById("off1").checked = !options.notification.new_git;
     document.getElementById("on2").checked = options.notification.download;
@@ -136,7 +134,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     value: result.options.check_failed
                 }, function (response) {
                 });
-            } else if (e.target.validity.valid === true && (e.target.id === "max_connections" || e.target.id === "wait" || e.target.id === "max_wait" || e.target.id === "failed_in_a_row")) {
+            } else if (e.target.validity.valid === true && (e.target.id === "max_connections" || e.target.id === "failed_in_a_row")) {
                 result.options.download[e.target.id] = Number(e.target.value);
                 chrome.storage.local.set(result);
                 chrome.runtime.sendMessage({

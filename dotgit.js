@@ -20,8 +20,6 @@ const DEFAULT_OPTIONS = {
     "debug": false,
     "check_failed": true,
     "download": {
-        "wait": 100,
-        "max_wait": 10000,
         "max_connections": 20,
         "failed_in_a_row": 250
     },
@@ -74,8 +72,6 @@ const GIT_WELL_KNOW_PATHS = [
     "info/exclude"
 ];
 
-let wait;
-let max_wait;
 let max_connections;
 let notification_new_git;
 let notification_download;
@@ -449,8 +445,6 @@ function compileBlacklist(list) {
 }
 
 function set_options(options) {
-    wait = options.download.wait;
-    max_wait = options.download.max_wait;
     max_connections = options.download.max_connections;
     failed_in_a_row = options.download.failed_in_a_row;
     notification_new_git = options.notification.new_git;
@@ -626,8 +620,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         'check_securitytxt': () => check_securitytxt = msg.value,
         'debug': () => debug = msg.value,
         'max_connections': () => max_connections = msg.value,
-        'wait': () => wait = msg.value,
-        'max_wait': () => max_wait = msg.value,
         'failed_in_a_row': () => failed_in_a_row = msg.value,
         'blacklist': () => { blacklist = msg.value; compiledBlacklist = compileBlacklist(blacklist); }
     };
