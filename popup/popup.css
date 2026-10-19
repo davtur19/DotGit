@@ -99,30 +99,13 @@ ul.collection {
     flex-shrink: 0;
 }
 
-/* Browsable directory - shown in blue, clickable */
-.dss-browsable {
-    color: #1565C0;
+/* Keyboard focus */
+.dss-entry:focus {
+    outline: 2px solid #1565C0;
+    outline-offset: -2px;
 }
 
-.dss-browsable .material-icons {
-    color: #1565C0;
-}
-
-/* Non-browsable entry (file or directory without nested .DS_Store) - grey */
-.dss-grey {
-    color: #9E9E9E;
-    cursor: default;
-}
-
-.dss-grey a {
-    color: #9E9E9E;
-}
-
-.dss-grey .material-icons {
-    color: #BDBDBD;
-}
-
-/* While probing - dim italic */
+/* While opening - dim italic */
 .dss-loading {
     color: #BDBDBD;
     font-style: italic;
