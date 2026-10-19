@@ -454,7 +454,11 @@ function startDownload(baseUrl, downloadFinished) {
 
 
 function compileBlacklist(list) {
-    return list.map(function (b) {
+    return list.filter(function (b) {
+        // Storage can be old or edited by hand: a non-string would throw here
+        // (and take the whole worker down), an empty entry would match every host.
+        return typeof b === "string" && b !== "";
+    }).map(function (b) {
         const splits = b.split('*');
         const parts = splits.map(function (el) { return escapeRegExp(el); });
         return new RegExp(parts.join('.*'));
