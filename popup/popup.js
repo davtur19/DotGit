@@ -1,8 +1,11 @@
+// Firefox exposes browser.* (and needs the "view-source:" prefix), but recent
+// Chromium versions define a global `browser` object too, so testing the
+// namespace alone is not a Firefox test. getBrowserInfo only exists on Firefox.
+const IS_FIREFOX = typeof browser !== "undefined" &&
+    typeof browser.runtime?.getBrowserInfo === "function";
+
 // add "view-source:" only in firefox, because chrome give this error: Not allowed to load local resource
-let HREF_PREFIX = "";
-if (typeof browser !== "undefined") {
-    HREF_PREFIX = "view-source:";
-}
+let HREF_PREFIX = IS_FIREFOX ? "view-source:" : "";
 
 let debug = false;
 
@@ -314,7 +317,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 async function checkPermissions() {
     try {
         // On Chrome, we have permissions by default from manifest
-        if (typeof browser === 'undefined') {
+        if (!IS_FIREFOX) {
             return true;
         }
 
@@ -332,7 +335,7 @@ async function checkPermissions() {
 async function requestPermissions() {
     try {
         // On Chrome, we don't need to request permissions
-        if (typeof browser === 'undefined') {
+        if (!IS_FIREFOX) {
             return true;
         }
 
@@ -361,7 +364,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     });
 
     // Only check permissions on Firefox
-    if (typeof browser !== 'undefined') {
+    if (IS_FIREFOX) {
         const hasPermissions = await checkPermissions();
         if (!hasPermissions) {
             document.getElementById('permissions-banner').style.display = 'block';
