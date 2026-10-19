@@ -93,6 +93,34 @@ let compiledBlacklist = [];
 let processingUrls = new Set();
 let debug = false;
 
+// `checked` and `withExposedGit` are single arrays in storage. Several listeners
+// can read-modify-write them at the same time (a page with many requests, several
+// tabs, the popup answering messages), and the last write would silently drop the
+// others. Every write goes through this promise chain instead.
+let storageLock = Promise.resolve();
+
+function withStorageLock(task) {
+    const result = storageLock.then(task, task);
+    storageLock = result.then(() => {}, () => {});
+    return result;
+}
+
+async function isChecked(origin) {
+    const {checked = []} = await chrome.storage.local.get(["checked"]);
+    return checked.includes(origin);
+}
+
+async function markChecked(origin) {
+    await withStorageLock(async () => {
+        const {checked = []} = await chrome.storage.local.get(["checked"]);
+        if (!checked.includes(origin)) {
+            checked.push(origin);
+            await chrome.storage.local.set({checked});
+        }
+    });
+}
+
+
 function debugLog(...args) {
     if (debug) {
         console.log('[DotGit Debug]', ...args);
@@ -471,54 +499,56 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     debugLog('Received message:', msg.type);
 
     if (msg.type === "FINDINGS_FOUND") {
-        chrome.storage.local.get(["withExposedGit"], async (result) => {
+        const data = msg.data;
+        (async () => {
             try {
-                let withExposedGit = result.withExposedGit || [];
-                const data = msg.data;
-                const origin = data.url;
-                let updatedList = false;
-                let newFindings = [];
+                const newFindings = await withStorageLock(async () => {
+                    const result = await chrome.storage.local.get(["withExposedGit"]);
+                    const withExposedGit = result.withExposedGit || [];
+                    const origin = data.url;
+                    const added = [];
 
-                for (const type of data.types) {
-                    const findingUrl = origin + (
-                        type === 'git' ? GIT_PATH :
-                        type === 'svn' ? SVN_PATH :
-                        type === 'hg' ? HG_PATH :
-                        type === 'env' ? ENV_PATH :
-                        DS_STORE
-                    );
+                    for (const type of data.types) {
+                        const findingUrl = origin + (
+                            type === 'git' ? GIT_PATH :
+                            type === 'svn' ? SVN_PATH :
+                            type === 'hg' ? HG_PATH :
+                            type === 'env' ? ENV_PATH :
+                            DS_STORE
+                        );
 
-                    if (!withExposedGit.some(item =>
-                        item.url === origin && item.type === type
-                    )) {
-                        withExposedGit.push({
-                            type: type,
-                            url: origin,
-                            open: data.opensource || false,
-                            securitytxt: data.securitytxt || false,
-                            foundAt: findingUrl
-                        });
-                        updatedList = true;
-                        newFindings.push({type, findingUrl});
+                        if (!withExposedGit.some(item =>
+                            item.url === origin && item.type === type
+                        )) {
+                            withExposedGit.push({
+                                type: type,
+                                url: origin,
+                                open: data.opensource || false,
+                                securitytxt: data.securitytxt || false,
+                                foundAt: findingUrl
+                            });
+                            added.push({type, findingUrl});
+                        }
                     }
-                }
 
-                if (updatedList) {
-                    await chrome.storage.local.set({withExposedGit});
-                    await setBadge();
-
-                    // Show a single notification with all findings
-                    if (newFindings.length > 0) {
-                        const title = newFindings.length === 1
-                                      ? `Exposed ${newFindings[0].type} found!`
-                                      : 'Multiple exposures found!';
-
-                        const message = newFindings.length === 1
-                                        ? `Found at: ${newFindings[0].findingUrl}`
-                                        : newFindings.map(f => `${f.type}: ${f.findingUrl}`).join('\n');
-
-                        notification(title, message);
+                    if (added.length > 0) {
+                        await chrome.storage.local.set({withExposedGit});
+                        await setBadge();
                     }
+
+                    return added;
+                });
+
+                if (newFindings.length > 0) {
+                    const title = newFindings.length === 1
+                                  ? `Exposed ${newFindings[0].type} found!`
+                                  : 'Multiple exposures found!';
+
+                    const message = newFindings.length === 1
+                                    ? `Found at: ${newFindings[0].findingUrl}`
+                                    : newFindings.map(f => `${f.type}: ${f.findingUrl}`).join('\n');
+
+                    notification(title, message);
                 }
 
                 sendResponse({status: true});
@@ -526,7 +556,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 debugLog('Error processing findings:', error);
                 sendResponse({status: false, error: error.message});
             }
-        });
+        })();
         return true;
     } else if (msg.type === "download") {
         notification("Download status", "Download started\nPlease wait...");
@@ -535,14 +565,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 .map(([key, value]) => `${key}: ${value}`)
                 .join('\n');
 
-            const downloading = await chrome.storage.local.get(["downloading"]);
-            if (downloading.downloading?.length) {
-                const index = downloading.downloading.indexOf(msg.url);
-                if (index > -1) {
-                    downloading.downloading.splice(index, 1);
-                    await chrome.storage.local.set({downloading: downloading.downloading});
+            await withStorageLock(async () => {
+                const downloading = await chrome.storage.local.get(["downloading"]);
+                if (downloading.downloading?.length) {
+                    const index = downloading.downloading.indexOf(msg.url);
+                    if (index > -1) {
+                        downloading.downloading.splice(index, 1);
+                        await chrome.storage.local.set({downloading: downloading.downloading});
+                    }
                 }
-            }
+            });
 
             notification("Download status",
                 fileExist
@@ -554,19 +586,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return true;
     } else if (msg.type === "REQUEST_GIT_CHECK") {
         const {origin} = msg;
-        chrome.storage.local.get(["options", "checked"], async (result) => {
-            const options = result.options || DEFAULT_OPTIONS;
-            const alreadyChecked = new Set(result.checked || []);
+        (async () => {
+            try {
+                const shouldFetch = await withStorageLock(async () => {
+                    const result = await chrome.storage.local.get(["options", "checked"]);
+                    const options = result.options || DEFAULT_OPTIONS;
+                    const checked = new Set(result.checked || []);
 
-            if (!options.functions.git || alreadyChecked.has(origin)) {
+                    if (!options.functions.git || checked.has(origin)) {
+                        return false;
+                    }
+
+                    checked.add(origin);
+                    await chrome.storage.local.set({checked: [...checked]});
+                    return true;
+                });
+
+                sendResponse({shouldFetch});
+            } catch (error) {
+                debugLog('Error in REQUEST_GIT_CHECK:', error);
                 sendResponse({shouldFetch: false});
-                return;
             }
-
-            alreadyChecked.add(origin);
-            await chrome.storage.local.set({checked: [...alreadyChecked]});
-            sendResponse({shouldFetch: true});
-        });
+        })();
         return true;
     }
 
