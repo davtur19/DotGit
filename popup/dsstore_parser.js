@@ -35,7 +35,7 @@ function readUtf16beString(pos, charCount, buffer, view) {
     if (pos + charCount * 2 > buffer.byteLength) throw new TypeError('UTF16: Unexpected end of file at 0x' + pos.toString(16));
     let s = '';
     for (let i = 0; i < charCount; i++) {
-        s += String.fromCodePoint(view.getUint16(pos + i * 2, false));
+        s += String.fromCharCode(view.getUint16(pos + i * 2, false));
     }
     return { value: s, pos: pos + charCount * 2 };
 }
