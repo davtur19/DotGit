@@ -610,6 +610,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             }
         })();
         return true;
+    } else if (msg.type === "CHECK_OPEN_SOURCE") {
+        // The content script cannot fetch github/gitlab (the page CORS applies);
+        // the background can, thanks to the host permissions. Only the two hosts
+        // the .git/config rule accepts are probed, so a crafted config cannot
+        // turn this into a request to an arbitrary (internal) address.
+        (async () => {
+            try {
+                const target = new URL(msg.url);
+                const allowed = /(^|\.)(github\.com|gitlab\.com)$/.test(target.hostname) &&
+                    (target.protocol === "https:" || target.protocol === "http:");
+                if (!allowed) {
+                    sendResponse({open: false});
+                    return;
+                }
+                const response = await fetch(target.href, {redirect: "follow"});
+                sendResponse({open: response.status === 200});
+            } catch (error) {
+                debugLog('Open source check failed:', error);
+                sendResponse({open: false});
+            }
+        })();
+        return true;
     }
 
     // Handle simple option updates

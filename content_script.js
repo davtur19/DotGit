@@ -235,21 +235,16 @@ if (typeof window.dotGitInjected === 'undefined') {
         return false;
     }
 
+    // Cross-origin requests run in the page context and are blocked by the
+    // page's CORS policy: the background owns the host permissions, so it is
+    // the one that probes github/gitlab.
     async function checkOpenSource(url) {
-        try {
-            const response = await fetchWithTimeout(url, {
-                redirect: "manual",
-                timeout: 10000
+        return new Promise((resolve) => {
+            chrome.runtime.sendMessage({type: "CHECK_OPEN_SOURCE", url: url}, function (response) {
+                void chrome.runtime.lastError;
+                resolve(response && response.open === true ? url : false);
             });
-
-            if (response.status === 200) {
-                return url;
-            }
-        } catch (error) {
-            // Ignore error
-        }
-
-        return false;
+        });
     }
 
     async function isOpenSource(url) {
