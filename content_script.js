@@ -33,7 +33,10 @@ if (typeof window.dotGitInjected === 'undefined') {
     ];
 
     const ENV_PATH = "/.env";
-    const ENV_SEARCH = "^[A-Z_]+=|^[#\\n\\r ][\\s\\S]*^[A-Z_]+=";
+    // dotenv keys are lowercase far more often than the uppercase convention
+    // suggests (Node's own .env parser accepts both, dotenv-linter warns about
+    // lowercase keys): accept any valid key, but not "name = value" with spaces.
+    const ENV_SEARCH = "^[A-Za-z_][A-Za-z0-9_]*=|^[#\\n\\r ][\\s\\S]*^[A-Za-z_][A-Za-z0-9_]*=";
 
     const DS_STORE = "/.DS_Store";
     const DS_STORE_HEADER = "\x00\x00\x00\x01Bud1";
