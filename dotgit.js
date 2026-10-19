@@ -821,24 +821,29 @@ async function processListener(details) {
         // silently disable every check: fill in whatever is missing.
         const options = checkOptions(DEFAULT_OPTIONS, stored.options || {});
 
+        // Only the top frame runs the checks: content_script.js is registered in
+        // all frames, and an unrestricted sendMessage made every iframe repeat
+        // the same requests (one full set per frame).
         const isContentScriptAvailable = await new Promise(resolve => {
-            chrome.tabs.sendMessage(tab.id, {type: "PING"}, response => {
+            chrome.tabs.sendMessage(tab.id, {type: "PING"}, {frameId: 0}, response => {
                 resolve(!chrome.runtime.lastError);
             });
         });
 
         if (!isContentScriptAvailable) {
             await chrome.scripting.executeScript({
-                target: {tabId: tab.id},
+                target: {tabId: tab.id, frameIds: [0]},
                 files: ['content_script.js']
             });
             await new Promise(resolve => setTimeout(resolve, 100));
         }
 
-        await chrome.tabs.sendMessage(tab.id, {
+        chrome.tabs.sendMessage(tab.id, {
             type: "CHECK_SITE",
             url: origin,
             options: options
+        }, {frameId: 0}).catch((error) => {
+            debugLog('Could not start the scan:', error);
         });
 
         // Remember the origin only once the scan was really dispatched: if the
