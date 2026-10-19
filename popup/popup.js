@@ -46,7 +46,7 @@ document.addEventListener("DOMContentLoaded", function () {
 function addElements(element, array, callback, downloading, max_sites) {
 
     for (let i = array.length - 1; i > -1; i--) {
-        if (i <= array.length - max_sites) {
+        if (i < array.length - max_sites) {
             break;
         }
 
