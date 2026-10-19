@@ -120,7 +120,6 @@ async function markChecked(origin) {
     });
 }
 
-
 function debugLog(...args) {
     if (debug) {
         console.log('[DotGit Debug]', ...args);
@@ -637,18 +636,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 
     if (msg.type === "check_failed") {
+        // The onErrorOccurred listener is always registered; processListener reads
+        // this flag, so there is nothing to add or remove here.
         check_failed = msg.value;
-        try {
-            chrome.webRequest.onErrorOccurred.removeListener(processListener);
-        } catch (e) {
-            // Ignore if listener doesn't exist
-        }
-        if (msg.value) {
-            chrome.webRequest.onErrorOccurred.addListener(
-                processListener,
-                {urls: ["<all_urls>"]}
-            );
-        }
         sendResponse({status: true});
         return false;
     }
@@ -662,6 +652,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     return false;
 });
+
+
+// Register the network listeners synchronously, at worker start. They used to be
+// registered inside the storage callback below, so the first navigation of a cold
+// worker could finish before the listener existed and that site was never scanned.
+chrome.webRequest.onCompleted.addListener(
+    details => processListener(details),
+    {urls: ["<all_urls>"]}
+);
+
+// Failed requests are only useful when the option is on, but the guard lives in
+// processListener: registering the listener here keeps startup race-free.
+chrome.webRequest.onErrorOccurred.addListener(
+    details => processListener(details),
+    {urls: ["<all_urls>"]}
+);
+
+chrome.webRequest.onHeadersReceived.addListener(
+    details => processListener(details),
+    {urls: ["<all_urls>"]}
+);
 
 
 chrome.storage.local.get(["checked", "withExposedGit", "options"], function (result) {
@@ -691,26 +702,6 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
     chrome.storage.local.set({options: checkOptions(DEFAULT_OPTIONS, result.options)});
 
     set_options(result.options);
-
-    // Add listener for completed requests
-    chrome.webRequest.onCompleted.addListener(
-        details => processListener(details),
-        {urls: ["<all_urls>"]}
-    );
-
-    // Add listener for error requests to catch failed attempts only if enabled
-    if (check_failed) {
-        chrome.webRequest.onErrorOccurred.addListener(
-            details => processListener(details),
-            {urls: ["<all_urls>"]}
-        );
-    }
-
-    // Keep the existing headers listener
-    chrome.webRequest.onHeadersReceived.addListener(
-        details => processListener(details),
-        {urls: ["<all_urls>"]}
-    );
 });
 
 // Reset download status at each start
@@ -732,10 +723,56 @@ async function requestPermissions() {
     }
 }
 
+function tabMatchesOrigin(tab, origin) {
+    try {
+        return !!tab.url && new URL(tab.url).origin === origin;
+    } catch (e) {
+        return false;
+    }
+}
+
+// Return the tab this request belongs to once it really shows `origin`, or null.
+// The tab URL is still the previous page when the main_frame request completes, so
+// poll it instead of waiting for a tabs.onUpdated 'complete' event: that event is
+// not delivered reliably (it can be missed entirely for the first navigation of a
+// fresh profile) and waiting for it was what made scans silently disappear.
+async function getScannableTab(details, origin, timeoutMs = 10000) {
+    if (details.tabId < 0) {
+        return null;
+    }
+
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const tab = await chrome.tabs.get(details.tabId).catch(() => null);
+        if (!tab) {
+            return null;
+        }
+        if (tabMatchesOrigin(tab, origin)) {
+            return tab;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return null;
+}
+
 async function processListener(details) {
-    const origin = new URL(details.url).origin;
+    const url = new URL(details.url);
+    const origin = url.origin;
+
+    // Only web pages can be scanned (chrome-extension:, about:, data: ... cannot).
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+        return;
+    }
 
     if (!check_failed && (details.error || details.statusCode >= 400)) {
+        return;
+    }
+
+    // Only document requests identify a site we can scan. Reacting to assets as
+    // well used to write every CDN origin into `checked` without ever scanning it
+    // (a subresource origin can never match its tab's origin) and leaked one
+    // tabs.onUpdated listener per origin.
+    if (details.type !== "main_frame") {
         return;
     }
 
@@ -746,6 +783,21 @@ async function processListener(details) {
     try {
         processingUrls.add(origin);
 
+        if (checkBlacklist(new URL(origin).hostname)) {
+            return;
+        }
+
+        if (await isChecked(origin)) {
+            return;
+        }
+
+        const tab = await getScannableTab(details, origin);
+
+        // Tab closed, navigated away, or never finished loading.
+        if (!tab) {
+            return;
+        }
+
         const hasPermissions = await chrome.permissions.contains({
             origins: [origin + "/*"]
         });
@@ -754,57 +806,33 @@ async function processListener(details) {
             return;
         }
 
-        const result = await chrome.storage.local.get(["checked", "options"]);
-        const options = result.options || DEFAULT_OPTIONS;
-        const alreadyChecked = new Set(result.checked || []);
-
-        if (alreadyChecked.has(origin) || checkBlacklist(new URL(origin).hostname)) {
-            return;
-        }
-
-        alreadyChecked.add(origin);
-        await chrome.storage.local.set({checked: [...alreadyChecked]});
-
-        // Wait for the tab to be fully loaded
-        const tabReady = await new Promise((resolve) => {
-            const listener = (tabId, changeInfo, tab) => {
-                try {
-                    const tabOrigin = new URL(tab.url).origin;
-                    if (tabOrigin === origin && changeInfo.status === 'complete') {
-                        chrome.tabs.onUpdated.removeListener(listener);
-                        resolve(tab);
-                    }
-                } catch (e) {
-                    // Invalid URL, ignore
-                }
-            };
-
-            chrome.tabs.onUpdated.addListener(listener);
-        });
-
-        if (!tabReady) {
-            return;
-        }
+        const {options = DEFAULT_OPTIONS} =
+            await chrome.storage.local.get(["options"]);
 
         const isContentScriptAvailable = await new Promise(resolve => {
-            chrome.tabs.sendMessage(tabReady.id, {type: "PING"}, response => {
+            chrome.tabs.sendMessage(tab.id, {type: "PING"}, response => {
                 resolve(!chrome.runtime.lastError);
             });
         });
 
         if (!isContentScriptAvailable) {
             await chrome.scripting.executeScript({
-                target: {tabId: tabReady.id},
+                target: {tabId: tab.id},
                 files: ['content_script.js']
             });
             await new Promise(resolve => setTimeout(resolve, 100));
         }
 
-        await chrome.tabs.sendMessage(tabReady.id, {
+        await chrome.tabs.sendMessage(tab.id, {
             type: "CHECK_SITE",
             url: origin,
             options: options
         });
+
+        // Remember the origin only once the scan was really dispatched: if the
+        // tab disappeared or the content script could not be injected, the next
+        // visit must try again instead of finding the site permanently "checked".
+        await markChecked(origin);
     } catch (error) {
         debugLog('Error in processListener:', error);
     } finally {
