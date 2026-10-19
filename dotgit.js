@@ -503,6 +503,22 @@ function checkOptions(default_options, storage_options) {
     return storage_options;
 }
 
+// True when stored options miss a key that the defaults define. A missing key is
+// not the same as a disabled one (undefined is falsy), so the merged object is
+// only persisted when something was really absent.
+function needsOptionsDefaults(default_options, storage_options) {
+    for (const [key, value] of Object.entries(default_options)) {
+        if (typeof storage_options[key] === "undefined") {
+            return true;
+        }
+        if (value !== null && typeof value === "object" && !Array.isArray(value) &&
+            needsOptionsDefaults(value, storage_options[key])) {
+            return true;
+        }
+    }
+    return false;
+}
+
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     debugLog('Received message:', msg.type);
@@ -709,9 +725,15 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
         chrome.storage.local.set({withExposedGit: result.withExposedGit});
     }
 
-    // Do not write the merged options back here: on update onInstalled resets
-    // them, and this late write used to restore the old values after the reset.
-    set_options(checkOptions(DEFAULT_OPTIONS, result.options));
+    // Write the merged options back only when keys were really missing: on
+    // update onInstalled resets them, and an unconditional write here used to
+    // restore the old values after the reset.
+    const optionsWereIncomplete = needsOptionsDefaults(DEFAULT_OPTIONS, result.options);
+    const mergedOptions = checkOptions(DEFAULT_OPTIONS, result.options);
+    if (optionsWereIncomplete) {
+        chrome.storage.local.set({options: mergedOptions});
+    }
+    set_options(mergedOptions);
 });
 
 // Reset download status at each start
@@ -816,10 +838,8 @@ async function processListener(details) {
             return;
         }
 
-        const stored = await chrome.storage.local.get(["options"]);
-        // A partial options object (older install, failed write) must not
-        // silently disable every check: fill in whatever is missing.
-        const options = checkOptions(DEFAULT_OPTIONS, stored.options || {});
+        const {options = DEFAULT_OPTIONS} =
+            await chrome.storage.local.get(["options"]);
 
         // Only the top frame runs the checks: content_script.js is registered in
         // all frames, and an unrestricted sendMessage made every iframe repeat
