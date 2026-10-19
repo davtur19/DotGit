@@ -97,7 +97,7 @@ function addElements(element, array, callback, downloading, max_sites) {
 
             const btnDownload = document.createElement("i");
             btnDownload.setAttribute("id", "db:" + callback(array[i].url));
-            if (downloading.includes(callback(array[i]))) {
+            if (downloading.includes(callback(array[i].url))) {
                 btnDownload.setAttribute("class", "material-icons btn-small blue disabled");
             } else {
                 btnDownload.setAttribute("class", "material-icons btn-small blue download");
