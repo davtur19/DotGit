@@ -63,7 +63,7 @@ if (typeof window.dotGitInjected === 'undefined') {
     // Check for exposed Git repository
     async function checkGit(url) {
         const to_check = url + GIT_HEAD_PATH;
-        const search = new RegExp(GIT_OBJECTS_SEARCH, "y");
+        const search = new RegExp("^" + GIT_OBJECTS_SEARCH);
 
         try {
             debugLog('Checking Git HEAD:', to_check);
