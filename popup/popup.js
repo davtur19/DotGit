@@ -289,28 +289,36 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
-    let downloadStatusText = "";
-    let downloadStatusArr = [];
-    if (request.type === "downloadStatus") {
-        downloadStatusText = document.getElementById("ds:" + request.url).innerText;
-        if (downloadStatusText === "") {
-            downloadStatusText = "0/0/0";
-        }
-        downloadStatusArr = downloadStatusText.split("/");
-        if (request.downloadStatus.successful) {
-            downloadStatusArr[0] = request.downloadStatus.successful.toString();
-        }
-        if (request.downloadStatus.failed) {
-            downloadStatusArr[1] = request.downloadStatus.failed.toString();
-        }
-        if (request.downloadStatus.total) {
-            downloadStatusArr[2] = request.downloadStatus.total.toString();
-        }
-        document.getElementById("ds:" + request.url).innerText = downloadStatusArr.join("/");
+    // The popup only tracks download progress. Other messages (FINDINGS_FOUND,
+    // GIT_FOUND, ...) belong to the background: answering them here would resolve
+    // the content script's await before the background has written to storage.
+    if (request.type !== "downloadStatus") {
+        return false;
     }
-    sendResponse({status: true});
 
-    // this will keep the message channel open to the other end until sendResponse is called
+    const statusElement = document.getElementById("ds:" + request.url);
+    if (!statusElement) {
+        return false;
+    }
+
+    let downloadStatusText = statusElement.innerText;
+    let downloadStatusArr = [];
+    if (downloadStatusText === "") {
+        downloadStatusText = "0/0/0";
+    }
+    downloadStatusArr = downloadStatusText.split("/");
+    if (request.downloadStatus.successful) {
+        downloadStatusArr[0] = request.downloadStatus.successful.toString();
+    }
+    if (request.downloadStatus.failed) {
+        downloadStatusArr[1] = request.downloadStatus.failed.toString();
+    }
+    if (request.downloadStatus.total) {
+        downloadStatusArr[2] = request.downloadStatus.total.toString();
+    }
+    statusElement.innerText = downloadStatusArr.join("/");
+
+    sendResponse({status: true});
     return true;
 });
 
