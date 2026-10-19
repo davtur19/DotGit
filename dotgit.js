@@ -709,9 +709,9 @@ chrome.storage.local.get(["checked", "withExposedGit", "options"], function (res
         chrome.storage.local.set({withExposedGit: result.withExposedGit});
     }
 
-    chrome.storage.local.set({options: checkOptions(DEFAULT_OPTIONS, result.options)});
-
-    set_options(result.options);
+    // Do not write the merged options back here: on update onInstalled resets
+    // them, and this late write used to restore the old values after the reset.
+    set_options(checkOptions(DEFAULT_OPTIONS, result.options));
 });
 
 // Reset download status at each start
@@ -878,6 +878,8 @@ chrome.runtime.onInstalled.addListener(async (details) => {
             downloading: [],
             options: DEFAULT_OPTIONS
         });
+        // Keep the in-memory copy consistent with the reset storage.
+        set_options(DEFAULT_OPTIONS);
 
         const hasPermissions = await chrome.permissions.contains({
             origins: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"]
