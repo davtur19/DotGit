@@ -541,13 +541,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 });
 
                 if (newFindings.length > 0) {
+                    const labels = {
+                        git: 'git repository',
+                        svn: 'svn repository',
+                        hg: 'hg repository',
+                        env: '.env file',
+                        ds_store: '.DS_Store file'
+                    };
+                    const label = (type) => labels[type] || type;
+
                     const title = newFindings.length === 1
-                                  ? `Exposed ${newFindings[0].type} found!`
-                                  : 'Multiple exposures found!';
+                                  ? `Exposed ${label(newFindings[0].type)} found!`
+                                  : `${newFindings.length} exposures found!`;
 
                     const message = newFindings.length === 1
                                     ? `Found at: ${newFindings[0].findingUrl}`
-                                    : newFindings.map(f => `${f.type}: ${f.findingUrl}`).join('\n');
+                                    : newFindings
+                                        .map(f => `${label(f.type)}: ${f.findingUrl}`)
+                                        .join('\n');
 
                     notification(title, message);
                 }

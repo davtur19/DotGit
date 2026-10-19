@@ -314,24 +314,24 @@ if (typeof window.dotGitInjected === 'undefined') {
                     git && options.check_opensource ? isOpenSource(url) : Promise.resolve(false)
                 ]);
 
-                // Send each finding individually to ensure proper processing
-                for (const type of types) {
-                    debugLog('Sending finding for type:', type);
-                    await new Promise((resolve) => {
-                        chrome.runtime.sendMessage({
-                            type: "FINDINGS_FOUND",
-                            data: {
-                                url: url,
-                                types: [type], // Send only one type at a time
-                                opensource: opensource,
-                                securitytxt: securitytxt
-                            }
-                        }, response => {
-                            debugLog('Background response for', type, ':', response);
-                            resolve();
-                        });
+                // One message for all types: the background stores them together
+                // and sends a single notification listing every exposure.
+                debugLog('Sending findings:', types);
+                await new Promise((resolve) => {
+                    chrome.runtime.sendMessage({
+                        type: "FINDINGS_FOUND",
+                        data: {
+                            url: url,
+                            types: types,
+                            opensource: opensource,
+                            securitytxt: securitytxt
+                        }
+                    }, response => {
+                        debugLog('Background response:', response);
+                        void chrome.runtime.lastError;
+                        resolve();
                     });
-                }
+                });
             }
 
             return {
