@@ -206,6 +206,12 @@ function parseDSStore(buffer) {
     const blockCount = result.value;
     pos = result.pos + 4;
 
+    // The block table has blockCount entries, padded up to a multiple of 256.
+    // blockCount comes from the file: reject impossible sizes before allocating.
+    if (blockCount > (buffer.byteLength - rootOffset - 8) / 4) {
+        throw new TypeError('Block count ' + blockCount + ' exceeds the allocator block');
+    }
+
     const blockAddrs = new Uint32Array(blockCount);
     for (let i = 0; i < blockCount; i++) {
         result = readU32(pos, buffer, view);
@@ -213,7 +219,7 @@ function parseDSStore(buffer) {
         pos = result.pos;
     }
 
-    pos = rootOffset + 8 + (256 * 4);
+    pos = rootOffset + 8 + (Math.ceil(blockCount / 256) * 256 * 4);
     if (pos + 4 > buffer.byteLength) {
         throw new TypeError('Allocator directory header out of range');
     }
