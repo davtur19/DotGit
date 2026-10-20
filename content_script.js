@@ -18,8 +18,8 @@ if (typeof window.dotGitInjected === 'undefined') {
     const GIT_HEAD_PATH = GIT_PATH + "HEAD";
     const GIT_CONFIG_PATH = GIT_PATH + "config";
     const GIT_HEAD_HEADER = "ref: refs/heads/";
-    const GIT_CONFIG_SEARCH = "url = (.*(github\\.com|gitlab\\.com).*)";
-    const GIT_OBJECTS_SEARCH = "[a-f0-9]{40}";
+    const GIT_CONFIG_SEARCH = /url = (.*(github\.com|gitlab\.com).*)/;
+    const GIT_OBJECTS_SEARCH = /^[a-f0-9]{40}/;
 
     const SVN_PATH = "/.svn/";
     const SVN_DB_PATH = SVN_PATH + "wc.db";
@@ -43,7 +43,7 @@ if (typeof window.dotGitInjected === 'undefined') {
         "/.well-known/security.txt",
         "/security.txt",
     ];
-    const SECURITYTXT_SEARCH = "Contact: ";
+    const SECURITYTXT_SEARCH = /Contact: /;
 
     // Every check shares one request timeout, so a slow connection is tuned in
     // one place. The option is in seconds (default 15), like the download one.
@@ -75,10 +75,21 @@ if (typeof window.dotGitInjected === 'undefined') {
         }
     }
 
+    // A page answers any path with any body: refuse what a check does not need
+    // instead of buffering it. Content-Length catches the honest case, the
+    // decoded length catches chunked or compressed responses.
+    async function readText(response, maxBytes) {
+        const declared = Number(response.headers.get("content-length"));
+        if (Number.isFinite(declared) && declared > maxBytes) {
+            return null;
+        }
+        const text = await response.text();
+        return text.length > maxBytes ? null : text;
+    }
+
     // Check for exposed Git repository
     async function checkGit(url, timeout) {
         const to_check = url + GIT_HEAD_PATH;
-        const search = new RegExp("^" + GIT_OBJECTS_SEARCH);
 
         try {
             debugLog('Checking Git HEAD:', to_check);
@@ -87,17 +98,15 @@ if (typeof window.dotGitInjected === 'undefined') {
             });
 
             debugLog('Response status:', response.status);
-            debugLog('Response headers:', response.headers && response.headers.get ?
-                'Headers available' : 'Headers not available');
 
             if (response.status === 200) {
-                const text = await response.text();
+                const text = await readText(response, 64 * 1024);
+                if (text === null) {
+                    return false;
+                }
                 debugLog('Git HEAD content:', text);
-                debugLog('Content length:', text.length);
-                debugLog('Starts with header?', text.startsWith(GIT_HEAD_HEADER));
-                debugLog('Matches hash?', search.test(text));
 
-                if (text.startsWith(GIT_HEAD_HEADER) || search.test(text)) {
+                if (text.startsWith(GIT_HEAD_HEADER) || GIT_OBJECTS_SEARCH.test(text)) {
                     debugLog('Git repository found!');
                     return true;
                 }
@@ -123,8 +132,8 @@ if (typeof window.dotGitInjected === 'undefined') {
             });
 
             if (response.status === 200) {
-                const text = await response.text();
-                if (text.startsWith(SVN_DB_HEADER)) {
+                const text = await readText(response, 64 * 1024);
+                if (text !== null && text.startsWith(SVN_DB_HEADER)) {
                     return true;
                 }
             }
@@ -145,8 +154,8 @@ if (typeof window.dotGitInjected === 'undefined') {
             });
 
             if (response.status === 200) {
-                const text = await response.text();
-                if (HG_MANIFEST_HEADERS.some(header => text.startsWith(header))) {
+                const text = await readText(response, 64 * 1024);
+                if (text !== null && HG_MANIFEST_HEADERS.some(header => text.startsWith(header))) {
                     return true;
                 }
             }
@@ -217,7 +226,8 @@ if (typeof window.dotGitInjected === 'undefined') {
             });
 
             if (response.status === 200) {
-                return looksLikeEnvFile(await response.text());
+                const text = await readText(response, 1024 * 1024);
+                return text !== null && looksLikeEnvFile(text);
             }
         } catch (error) {
             // Ignore error
@@ -236,8 +246,8 @@ if (typeof window.dotGitInjected === 'undefined') {
             });
 
             if (response.status === 200) {
-                const text = await response.text();
-                if (text.startsWith(DS_STORE_HEADER)) {
+                const text = await readText(response, 1024 * 1024);
+                if (text !== null && text.startsWith(DS_STORE_HEADER)) {
                     return true;
                 }
             }
@@ -252,7 +262,6 @@ if (typeof window.dotGitInjected === 'undefined') {
     async function checkSecuritytxt(url, timeout) {
         for (const path of SECURITYTXT_PATHS) {
             const to_check = url + path;
-            const search = new RegExp(SECURITYTXT_SEARCH);
 
             try {
                 const response = await fetchWithTimeout(to_check, {
@@ -260,8 +269,8 @@ if (typeof window.dotGitInjected === 'undefined') {
                 });
 
                 if (response.status === 200) {
-                    const text = await response.text();
-                    if (search.test(text)) {
+                    const text = await readText(response, 256 * 1024);
+                    if (text !== null && SECURITYTXT_SEARCH.test(text)) {
                         return to_check;
                     }
                 }
@@ -274,8 +283,6 @@ if (typeof window.dotGitInjected === 'undefined') {
 
     async function checkGitConfig(url, timeout) {
         const to_check = url + GIT_CONFIG_PATH;
-        const search = new RegExp(GIT_CONFIG_SEARCH);
-        let result = [];
 
         try {
             const response = await fetchWithTimeout(to_check, {
@@ -283,8 +290,9 @@ if (typeof window.dotGitInjected === 'undefined') {
             });
 
             if (response.status === 200) {
-                let text = await response.text();
-                if (text !== false && ((result = search.exec(text)) !== null)) {
+                const text = await readText(response, 64 * 1024);
+                const result = text === null ? null : GIT_CONFIG_SEARCH.exec(text);
+                if (result !== null) {
                     return result[1];
                 }
             }

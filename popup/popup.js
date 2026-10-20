@@ -11,6 +11,15 @@ let HREF_PREFIX = IS_FIREFOX ? "view-source:" : "";
 
 let debug = false;
 
+// The theme is a CSS class name read from storage: accept only the values the
+// options page offers, so a hand-edited value cannot add arbitrary classes.
+const THEME_COLORS = ["grey", "red", "green", "blue", "yellow", "orange", "purple", "pink", "brown"];
+
+function themeColor(value) {
+    const color = String(value);
+    return THEME_COLORS.includes(color) ? color : "grey";
+}
+
 // Open Source Initiative keyhole, drawn inline so the list needs no extra
 // request: "public" (a globe) said little about a repository being open source.
 // Vector by Colin Viebrock for the Open Source Initiative, CC BY 2.5.
@@ -46,7 +55,7 @@ if (typeof chrome.browserAction !== "undefined" && typeof chrome.browserAction.s
 document.addEventListener("DOMContentLoaded", function () {
     chrome.storage.local.get(["options"], function (options) {
         if (!options.options) return;
-        const color = String(options.options.color);
+        const color = themeColor(options.options.color);
         const list = document.getElementsByClassName("custom-color");
         for (let n = 0; n < list.length; ++n) {
             list[n].className += " " + color;
@@ -60,6 +69,11 @@ function addElements(element, array, callback, downloading, max_sites) {
     for (let i = array.length - 1; i > -1; i--) {
         if (i < array.length - max_sites) {
             break;
+        }
+        // Storage can hold junk from an old version or a hand edit: one bad
+        // entry must not take the whole list (and the popup) down.
+        if (array[i] === null || typeof array[i] !== "object") {
+            continue;
         }
 
         /*
@@ -202,65 +216,46 @@ document.addEventListener("click", async (event) => {
     if (button.id === "request-permissions") {
         await requestPermissions();
     } else if (button.id === "reset") {
-        chrome.storage.local.set({
-            checked: [],
-            withExposedGit: [],
-            downloading: []
-        }, () => {
-            // Ricarica solo il popup invece di ricaricare l'intera estensione
+        // The background owns these lists: it writes them under the same lock
+        // used by the scanner, so a finding stored meanwhile is not wiped.
+        chrome.runtime.sendMessage({type: "RESET_STATE"}, function () {
+            void chrome.runtime.lastError;
             window.location.reload();
         });
     } else if (button.classList.contains("download")) {
         const url = button.id.substring(3);
 
         button.setAttribute("class", "material-icons btn-small blue disabled");
-        chrome.storage.local.get(["downloading"], function (downloading) {
-            if (typeof downloading.downloading !== "undefined" && downloading.downloading.length !== 0) {
-                downloading.downloading.push(url);
-                chrome.storage.local.set({
-                    downloading: downloading.downloading
-                });
-            } else {
-                chrome.storage.local.set({
-                    downloading: [url]
-                });
-            }
-        });
-
+        // The background records the pending download before starting it.
         chrome.runtime.sendMessage({
             type: "download",
             url: url
         }, function () {
+            void chrome.runtime.lastError;
             button.setAttribute("class", "material-icons btn-small blue download");
         });
     } else if (button.classList.contains("delete")) {
+        // id is "del:<type>:<url>"
         const split = button.id.split(":");
-        const type = split[1];
+        const findingType = split[1];
         const url = split.slice(2).join(":");
-        let indexDelete = null;
+        const listItem = button.closest("li");
 
         button.setAttribute("class", "material-icons btn-small red disabled");
-        chrome.storage.local.get(["withExposedGit"], function (result) {
-            result.withExposedGit.forEach(function (obj, i) {
-                if (obj.type === type && obj.url === url) {
-                    indexDelete = i;
-                }
-            });
-
-            if (indexDelete !== null) {
-                result.withExposedGit.splice(indexDelete, 1);
-                button.parentNode.parentNode.outerHTML = "";
-                // change title
-                const hostElementFoundTitle = document.getElementById("hostsFoundTitle");
-                const split2 = hostElementFoundTitle.textContent.split(" ");
-                const number = split2[2];
-                const strTitle = split2.slice(3).join(" ");
-                hostElementFoundTitle.textContent = "Total found: " + (number - 1) + " " + strTitle;
-
-                chrome.storage.local.set({
-                    withExposedGit: result.withExposedGit
-                });
+        chrome.runtime.sendMessage({
+            type: "DELETE_FINDING",
+            findingType: findingType,
+            url: url
+        }, function (response) {
+            void chrome.runtime.lastError;
+            if (!response || !response.removed) {
+                button.setAttribute("class", "material-icons btn-small red delete");
+                return;
             }
+            if (listItem) {
+                listItem.remove();
+            }
+            setFoundTitle(response.remaining);
         });
     } else if (button.classList.contains("browse-dsstore")) {
         const url = button.id.substring("dsbrowse:".length);
@@ -280,12 +275,21 @@ document.addEventListener("click", async (event) => {
     }
 });
 
+function setFoundTitle(count) {
+    const title = document.getElementById("hostsFoundTitle");
+    const shown = /Max shown: (\d+)/.exec(title.textContent);
+    title.textContent = "Total found: " + count + " Max shown: " + (shown ? shown[1] : 100);
+}
+
+
 document.addEventListener("DOMContentLoaded", function () {
     chrome.storage.local.get(["withExposedGit", "downloading", "options"], function (visitedSite) {
         // Do not skip rendering when options are not written yet: the popup can
         // open before the background has initialised them.
         const storedMaxSites = Number(visitedSite.options?.max_sites);
-        const maxSites = Number.isFinite(storedMaxSites) ? storedMaxSites : 100;
+        const maxSites = Number.isFinite(storedMaxSites)
+            ? Math.min(Math.max(Math.trunc(storedMaxSites), 1), 1000000000)
+            : 100;
         document.getElementById("hostsFoundTitle").textContent =
             "Total found: 0 Max shown: " + maxSites;
         if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
@@ -464,8 +468,9 @@ async function openDsStoreBrowser(siteUrl) {
     chrome.storage.local.get(["options"], function (result) {
         if (result.options && result.options.color) {
             const navWrapper = document.querySelector("#dss-nav .nav-wrapper");
-            if (navWrapper && !navWrapper.classList.contains(result.options.color)) {
-                navWrapper.classList.add(result.options.color);
+            const color = themeColor(result.options.color);
+            if (navWrapper && !navWrapper.classList.contains(color)) {
+                navWrapper.classList.add(color);
             }
         }
     });

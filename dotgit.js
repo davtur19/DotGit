@@ -145,14 +145,9 @@ chrome.runtime.onSuspend.addListener(() => {
 });
 
 function notification(title, message) {
-    if (title === "Download status") {
-        if (!notification_download) {
-            return true;
-        }
-    } else {
-        if (!notification_new_git) {
-            return true;
-        }
+    const enabled = title === "Download status" ? notification_download : notification_new_git;
+    if (!enabled) {
+        return;
     }
 
     chrome.notifications.create({
@@ -427,14 +422,10 @@ function startDownload(baseUrl, downloadFinished) {
                 search.lastIndex++;
             }
 
-            for (let i = 0; i < matches.length; i++) {
-                let pathExt = GIT_PACK_PATH + matches[i] + GIT_PACK_EXT;
-                let pathIdx = GIT_PACK_PATH + matches[i] + GIT_IDX_EXT;
-                enqueue(pathExt, false, function () {
-                });
-                enqueue(pathIdx, false, function () {
-                });
-            }
+            enqueue(GIT_PACK_PATH + matches[0] + GIT_PACK_EXT, false, function () {
+            });
+            enqueue(GIT_PACK_PATH + matches[0] + GIT_IDX_EXT, false, function () {
+            });
         }
     }
 
@@ -464,17 +455,17 @@ function compileBlacklist(list) {
     });
 }
 
-// The option stores seconds; hand-edited storage must not turn a missing or
-// malformed value into an immediate abort (or an endless wait).
+// The option stores seconds. set_options and the option message clamp it to
+// 5..300, so a stale or hand-edited value can no longer make a request abort
+// at once or wait forever.
 function requestTimeoutMs() {
-    const seconds = Number(request_timeout);
-    return (Number.isFinite(seconds) ? Math.min(Math.max(seconds, 5), 300) : 15) * 1000;
+    return request_timeout * 1000;
 }
 
 function set_options(options) {
-    max_connections = Number(options.download.max_connections);
-    request_timeout = Number(options.request_timeout);
-    failed_in_a_row = Number(options.download.failed_in_a_row);
+    max_connections = clampInt(options.download.max_connections, 20, 1, 1000);
+    request_timeout = clampInt(options.request_timeout, 15, 5, 300);
+    failed_in_a_row = clampInt(options.download.failed_in_a_row, 250, 1, 1000000);
     notification_new_git = Boolean(options.notification.new_git);
     notification_download = Boolean(options.notification.download);
     check_opensource = Boolean(options.check_opensource);
@@ -494,6 +485,41 @@ function set_options(options) {
 function isPlainObject(value) {
     return value !== null && typeof value === "object" && !Array.isArray(value);
 }
+
+
+// Storage is editable by hand and the options page can send any number: a NaN
+// or a zero would silently stop the download (0 connections) or remove its
+// limits (NaN never exceeds `failed_in_a_row`).
+function clampInt(value, fallback, min, max) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+        return fallback;
+    }
+    return Math.min(Math.max(Math.trunc(number), min), max);
+}
+
+
+// Messages carry URLs that end up in storage and in the popup as hrefs. Only
+// plain http(s) survives, whatever an old version or a hand edit left behind.
+function normalizeOrigin(value) {
+    try {
+        const url = new URL(String(value));
+        return url.protocol === "http:" || url.protocol === "https:" ? url.origin : false;
+    } catch (error) {
+        return false;
+    }
+}
+
+function normalizeHttpUrl(value) {
+    try {
+        const url = new URL(String(value));
+        return url.protocol === "http:" || url.protocol === "https:" ? url.href : false;
+    } catch (error) {
+        return false;
+    }
+}
+
+const FINDING_TYPES = new Set(["git", "svn", "hg", "env", "ds_store"]);
 
 
 function checkOptions(default_options, storage_options) {
@@ -575,16 +601,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     debugLog('Received message:', msg.type);
 
     if (msg.type === "FINDINGS_FOUND") {
-        const data = msg.data;
+        const data = msg.data || {};
+        const origin = normalizeOrigin(data.url);
+        const types = Array.isArray(data.types) ? data.types.filter((type) => FINDING_TYPES.has(type)) : [];
+        const opensource = normalizeHttpUrl(data.opensource);
+        const securitytxt = normalizeHttpUrl(data.securitytxt);
+
+        if (!origin || types.length === 0) {
+            debugLog('Ignoring a malformed findings message:', data);
+            sendResponse({status: false});
+            return false;
+        }
+
         (async () => {
             try {
                 const newFindings = await withStorageLock(async () => {
                     const result = await chrome.storage.local.get(["withExposedGit"]);
                     const withExposedGit = result.withExposedGit || [];
-                    const origin = data.url;
                     const added = [];
 
-                    for (const type of data.types) {
+                    for (const type of types) {
                         const findingUrl = origin + (
                             type === 'git' ? GIT_PATH :
                             type === 'svn' ? SVN_PATH :
@@ -599,8 +635,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                             withExposedGit.push({
                                 type: type,
                                 url: origin,
-                                open: data.opensource || false,
-                                securitytxt: data.securitytxt || false,
+                                open: opensource,
+                                securitytxt: securitytxt,
                                 foundAt: findingUrl
                             });
                             added.push({type, findingUrl});
@@ -646,33 +682,58 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         })();
         return true;
     } else if (msg.type === "download") {
-        notification("Download status", "Download started\nPlease wait...");
-        startDownload(msg.url, async (fileExist, downloadStats) => {
-            let strStatus = Object.entries(downloadStats)
-                .map(([key, value]) => `${key}: ${value}`)
-                .join('\n');
-
-            await withStorageLock(async () => {
-                const downloading = await chrome.storage.local.get(["downloading"]);
-                if (downloading.downloading?.length) {
-                    const index = downloading.downloading.indexOf(msg.url);
-                    if (index > -1) {
-                        downloading.downloading.splice(index, 1);
-                        await chrome.storage.local.set({downloading: downloading.downloading});
+        const url = normalizeOrigin(msg.url);
+        if (!url) {
+            sendResponse({status: false});
+            return false;
+        }
+        (async () => {
+            try {
+                // Registered here, before the download starts: the popup used to
+                // write it after sending the message, so a download that failed at
+                // once was removed from the list before that write landed and the
+                // button stayed disabled until the next worker start.
+                await withStorageLock(async () => {
+                    const {downloading = []} = await chrome.storage.local.get(["downloading"]);
+                    if (!downloading.includes(url)) {
+                        downloading.push(url);
+                        await chrome.storage.local.set({downloading});
                     }
-                }
-            });
+                });
+                notification("Download status", "Download started\nPlease wait...");
+                startDownload(url, async (fileExist, downloadStats) => {
+                    let strStatus = Object.entries(downloadStats)
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join('\n');
 
-            notification("Download status",
-                fileExist
-                ? `Downloaded ${msg.url}\n${strStatus}`
-                : `Failed to download ${msg.url}\nNo files found\n${strStatus}`
-            );
-            sendResponse({status: fileExist});
-        });
+                    await withStorageLock(async () => {
+                        const {downloading = []} = await chrome.storage.local.get(["downloading"]);
+                        const index = downloading.indexOf(url);
+                        if (index > -1) {
+                            downloading.splice(index, 1);
+                            await chrome.storage.local.set({downloading});
+                        }
+                    });
+
+                    notification("Download status",
+                        fileExist
+                        ? `Downloaded ${url}\n${strStatus}`
+                        : `Failed to download ${url}\nNo files found\n${strStatus}`
+                    );
+                    sendResponse({status: fileExist});
+                });
+            } catch (error) {
+                debugLog('Error starting a download:', error);
+                sendResponse({status: false});
+            }
+        })();
         return true;
     } else if (msg.type === "REQUEST_GIT_CHECK") {
-        const {origin} = msg;
+        const origin = normalizeOrigin(msg.origin);
+        if (!origin) {
+            sendResponse({shouldFetch: false});
+            return false;
+        }
         (async () => {
             try {
                 const shouldFetch = await withStorageLock(async () => {
@@ -699,6 +760,50 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     } else if (msg.type === "CHECK_OPEN_SOURCE") {
         isReachableRepository(msg.url).then((open) => sendResponse({open}));
         return true;
+    } else if (msg.type === "DELETE_FINDING") {
+        // The popup used to read, splice and write the list itself: a finding
+        // stored by the scanner in that gap was overwritten. One writer only.
+        const origin = normalizeOrigin(msg.url);
+        const findingType = String(msg.findingType);
+        (async () => {
+            try {
+                const removed = await withStorageLock(async () => {
+                    const {withExposedGit = []} = await chrome.storage.local.get(["withExposedGit"]);
+                    const index = withExposedGit.findIndex((item) =>
+                        item && item.url === origin && item.type === findingType);
+                    if (index === -1) {
+                        return false;
+                    }
+                    withExposedGit.splice(index, 1);
+                    await chrome.storage.local.set({withExposedGit});
+                    return true;
+                });
+                await setBadge();
+                const {withExposedGit = []} = await chrome.storage.local.get(["withExposedGit"]);
+                sendResponse({status: true, removed, remaining: withExposedGit.length});
+            } catch (error) {
+                debugLog('Error deleting a finding:', error);
+                sendResponse({status: false, removed: false});
+            }
+        })();
+        return true;
+    } else if (msg.type === "RESET_STATE") {
+        // Same reason as DELETE_FINDING: the reset must not race a new finding.
+        (async () => {
+            try {
+                await withStorageLock(() => chrome.storage.local.set({
+                    checked: [],
+                    withExposedGit: [],
+                    downloading: []
+                }));
+                await setBadge();
+                sendResponse({status: true});
+            } catch (error) {
+                debugLog('Error resetting the state:', error);
+                sendResponse({status: false});
+            }
+        })();
+        return true;
     }
 
     // Handle simple option updates
@@ -713,10 +818,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         'check_opensource': () => check_opensource = Boolean(msg.value),
         'check_securitytxt': () => check_securitytxt = Boolean(msg.value),
         'debug': () => debug = Boolean(msg.value),
-        'max_connections': () => max_connections = Number(msg.value),
-        'request_timeout': () => request_timeout = Number(msg.value),
-        'failed_in_a_row': () => failed_in_a_row = Number(msg.value),
-        'blacklist': () => { blacklist = msg.value; compiledBlacklist = compileBlacklist(blacklist); }
+        'max_connections': () => max_connections = clampInt(msg.value, max_connections, 1, 1000),
+        'request_timeout': () => request_timeout = clampInt(msg.value, request_timeout, 5, 300),
+        'failed_in_a_row': () => failed_in_a_row = clampInt(msg.value, failed_in_a_row, 1, 1000000),
+        'blacklist': () => {
+            blacklist = Array.isArray(msg.value) ? msg.value : [];
+            compiledBlacklist = compileBlacklist(blacklist);
+        }
     };
 
     if (optionHandlers[msg.type]) {
@@ -918,7 +1026,13 @@ async function getScannableTab(details, origin, timeoutMs = 10000) {
 }
 
 async function processListener(details) {
-    const url = new URL(details.url);
+    let url;
+    try {
+        url = new URL(details.url);
+    } catch (error) {
+        debugLog('Could not parse a request URL:', details.url, error);
+        return;
+    }
     const origin = url.origin;
 
     // Only web pages can be scanned (chrome-extension:, about:, data: ... cannot).

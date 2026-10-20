@@ -34,10 +34,10 @@ function set_gui(options) {
         document.querySelector(`input[name="${name}"][value="off"]`).checked = !enabled;
     }
 
-    document.getElementById("max_sites").value = String(options.max_sites);
+    document.getElementById("max_sites").value = String(options.max_sites || 100);
     document.getElementById("request_timeout").value = String(options.request_timeout || 15);
-    document.getElementById("max_connections").value = String(download.max_connections);
-    document.getElementById("failed_in_a_row").value = String(download.failed_in_a_row);
+    document.getElementById("max_connections").value = String(download.max_connections || 20);
+    document.getElementById("failed_in_a_row").value = String(download.failed_in_a_row || 250);
     document.getElementById("blacklist").value = (options.blacklist || []).join(", ");
 }
 
