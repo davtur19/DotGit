@@ -75,6 +75,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 function addElements(element, array, callback, downloading, max_sites) {
+    // A hand-edited storage can hold a non-array here: never let a bad value take
+    // the whole list down (the entries below get the same tolerance).
+    const activeDownloads = Array.isArray(downloading) ? downloading : [];
 
     for (let i = array.length - 1; i > -1; i--) {
         if (i < array.length - max_sites) {
@@ -136,7 +139,7 @@ function addElements(element, array, callback, downloading, max_sites) {
 
             const btnDownload = document.createElement("i");
             btnDownload.setAttribute("id", "db:" + callback(array[i].url));
-            if (downloading.includes(callback(array[i].url))) {
+            if (activeDownloads.includes(callback(array[i].url))) {
                 btnDownload.setAttribute("class", "material-icons btn-small blue disabled");
             } else {
                 btnDownload.setAttribute("class", "material-icons btn-small blue download");

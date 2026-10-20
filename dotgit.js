@@ -196,8 +196,9 @@ async function setBadge() {
     try {
         const result = await chrome.storage.local.get(["withExposedGit"]);
         if (typeof chrome.action !== "undefined" && typeof chrome.action.setBadgeText !== "undefined") {
-            const text = (result.withExposedGit || []).length.toString();
-            await chrome.action.setBadgeText({text});
+            const count = (result.withExposedGit || []).length;
+            // No findings means no badge: "0" is a number shown on the icon.
+            await chrome.action.setBadgeText({text: count > 0 ? String(count) : ""});
         }
     } catch (error) {
         debugLog('setBadge - Error:', error);
@@ -756,35 +757,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             } catch (error) {
                 debugLog('Error starting a download:', error);
                 sendResponse({status: false});
-            }
-        })();
-        return true;
-    } else if (msg.type === "REQUEST_GIT_CHECK") {
-        const origin = normalizeOrigin(msg.origin);
-        if (!origin) {
-            sendResponse({shouldFetch: false});
-            return false;
-        }
-        (async () => {
-            try {
-                const shouldFetch = await withStorageLock(async () => {
-                    const result = await chrome.storage.local.get(["options", "checked"]);
-                    const options = result.options || DEFAULT_OPTIONS;
-                    const checked = new Set(result.checked || []);
-
-                    if (!options.functions.git || checked.has(origin)) {
-                        return false;
-                    }
-
-                    checked.add(origin);
-                    await chrome.storage.local.set({checked: capList([...checked])});
-                    return true;
-                });
-
-                sendResponse({shouldFetch});
-            } catch (error) {
-                debugLog('Error in REQUEST_GIT_CHECK:', error);
-                sendResponse({shouldFetch: false});
             }
         })();
         return true;
