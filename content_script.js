@@ -364,6 +364,14 @@ if (typeof window.dotGitInjected === 'undefined') {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         debugLog('Received message:', request);
 
+        // The background asks this before injecting the content script again.
+        // Without an answer the port closes and every scan looks like a page
+        // that still needs the script.
+        if (request.type === "PING") {
+            sendResponse({ok: true});
+            return false;
+        }
+
         if (request.type === "CHECK_SITE") {
             const {url, options} = request;
             debug = options.debug;
