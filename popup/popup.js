@@ -122,7 +122,11 @@ function addElements(element, array, callback, downloading, max_sites) {
             openSourceStatus.innerText = "public";
 
             link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.git/config");
-            spanIcon.appendChild(btnDownload);
+            // Firefox for Android has no downloads API (removed in 79): the scan
+            // works there, the download button would not.
+            if (chrome.downloads && chrome.downloads.download) {
+                spanIcon.appendChild(btnDownload);
+            }
             spanDownloadStatus.appendChild(downloadStatus);
             spanOpenSourceStatus.appendChild(openSourceStatus);
             listItem.appendChild(spanIcon);

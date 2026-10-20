@@ -233,19 +233,23 @@ function startDownload(baseUrl, downloadFinished) {
         if (typeof URL.createObjectURL === 'function') {
             // FireFox download
             zip.generateAsync({type: "blob"}).then(function (zipBlob) {
-                chrome.downloads.download({
-                    url: URL.createObjectURL(zipBlob),
-                    filename: `${filename}.zip`
-                });
+                if (chrome.downloads && chrome.downloads.download) {
+                    chrome.downloads.download({
+                        url: URL.createObjectURL(zipBlob),
+                        filename: `${filename}.zip`
+                    });
+                }
                 downloadFinished(fileExist, downloadStats);
             });
         } else {
             // Chrome download
             zip.generateAsync({type: "base64"}).then(function (zipData) {
-                chrome.downloads.download({
-                    url: `data:application/octet-stream;base64,${zipData}`,
-                    filename: `${filename}.zip`
-                });
+                if (chrome.downloads && chrome.downloads.download) {
+                    chrome.downloads.download({
+                        url: `data:application/octet-stream;base64,${zipData}`,
+                        filename: `${filename}.zip`
+                    });
+                }
                 downloadFinished(fileExist, downloadStats);
             });
         }
