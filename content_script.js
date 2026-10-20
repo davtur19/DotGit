@@ -152,7 +152,7 @@ if (typeof window.dotGitInjected === 'undefined') {
     // Check for exposed .env file
     async function checkEnv(url) {
         const to_check = url + ENV_PATH;
-        const search = new RegExp(ENV_SEARCH, "g");
+        const search = new RegExp(ENV_SEARCH, "gm");
 
         try {
             const response = await fetchWithTimeout(to_check, {
