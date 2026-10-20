@@ -58,21 +58,19 @@ if (typeof window.dotGitInjected === 'undefined') {
             DEFAULT_REQUEST_TIMEOUT;
     }
 
-    // Helper function to make fetch requests with timeout
+    // A request is over when its body is: the abort timer is not cleared when the
+    // headers arrive, otherwise a server that sends them and then stalls the body
+    // kept the whole scan (and every finding of that page) pending forever.
     async function fetchWithTimeout(resource, options = {}) {
-        const {timeout = DEFAULT_REQUEST_TIMEOUT} = options;
+        const {timeout = DEFAULT_REQUEST_TIMEOUT, ...init} = options;
 
         const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), timeout);
+        setTimeout(() => controller.abort(), timeout);
 
-        try {
-            return await fetch(resource, {
-                ...options,
-                signal: controller.signal
-            });
-        } finally {
-            clearTimeout(id);
-        }
+        return fetch(resource, {
+            ...init,
+            signal: controller.signal
+        });
     }
 
     // A page answers any path with any body: refuse what a check does not need

@@ -456,6 +456,8 @@ function dssEntryUrl(baseUrl, name) {
 // Fetch and parse baseUrl/.DS_Store. HTTP failures carry `status`; network and
 // parse failures do not, so callers can tell "not a browsable folder" from
 // "the request itself failed".
+const MAX_DS_STORE_BYTES = 20 * 1024 * 1024;
+
 async function dssFetchEntries(baseUrl) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), fetchTimeoutMs);
@@ -470,7 +472,17 @@ async function dssFetchEntries(baseUrl) {
             error.status = response.status;
             throw error;
         }
-        return parseDSStore(await response.arrayBuffer());
+        // The body comes from the site: never buffer an unbounded one in the
+        // popup. A real .DS_Store is a few MB even for a huge folder.
+        const declared = Number(response.headers.get("content-length"));
+        if (Number.isFinite(declared) && declared > MAX_DS_STORE_BYTES) {
+            throw new Error(".DS_Store too large (" + declared + " bytes)");
+        }
+        const buffer = await response.arrayBuffer();
+        if (buffer.byteLength > MAX_DS_STORE_BYTES) {
+            throw new Error(".DS_Store too large (" + buffer.byteLength + " bytes)");
+        }
+        return parseDSStore(buffer);
     } catch (error) {
         if (error.name === "AbortError") {
             throw new Error("timed out after " + (fetchTimeoutMs / 1000) + " s");

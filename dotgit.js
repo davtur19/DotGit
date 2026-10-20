@@ -352,7 +352,9 @@ function startDownload(baseUrl, downloadFinished) {
                     } catch (e) {
                         // do nothing
                     }
-                } else {
+                } else if (callback) {
+                    // Packs and indexes are stored as they are: building a string
+                    // for a no-op callback doubled the memory of the largest file.
                     callback(arrayBufferToString(words));
                 }
             }
@@ -453,10 +455,8 @@ function startDownload(baseUrl, downloadFinished) {
                 search.lastIndex++;
             }
 
-            enqueue(GIT_PACK_PATH + matches[0] + GIT_PACK_EXT, false, function () {
-            });
-            enqueue(GIT_PACK_PATH + matches[0] + GIT_IDX_EXT, false, function () {
-            });
+            enqueue(GIT_PACK_PATH + matches[0] + GIT_PACK_EXT, false, null);
+            enqueue(GIT_PACK_PATH + matches[0] + GIT_IDX_EXT, false, null);
         }
     }
 
@@ -661,7 +661,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                         );
 
                         if (!withExposedGit.some(item =>
-                            item.url === origin && item.type === type
+                            item && item.type === type && item.url === origin
                         )) {
                             withExposedGit.push({
                                 type: type,
