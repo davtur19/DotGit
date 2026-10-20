@@ -40,7 +40,7 @@ ul.collection {
     background-color: #7e57c2 !important;
 }
 
-/* The open source mark is an SVG instead of a font ligature. */
+/* The open source mark is an svg file like the rest of the icons now. */
 .opensource {
     display: inline-flex;
     align-items: center;
@@ -50,11 +50,24 @@ ul.collection {
     color: #fff;
 }
 
-.opensource svg {
+.opensource img {
     display: block;
     width: 15px;
     height: 15px;
-    fill: currentColor;
+}
+
+/* The material font is gone: the <i>/<a> keep the colours, radius and sizes,
+   the packaged svg is the icon itself (block inside the badges so the line
+   box does not inflate, inline so the 56px nav keeps centering it). */
+.material-icons img {
+    width: 24px;
+    height: 24px;
+    display: block;
+}
+
+nav .material-icons img {
+    display: inline-block;
+    vertical-align: middle;
 }
 
 .download-status {
