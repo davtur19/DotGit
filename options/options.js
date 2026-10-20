@@ -7,38 +7,37 @@ function set_gui(options) {
     const download = options.download || {};
     const notification = options.notification || {};
 
-    let colors = document.getElementById("color");
+    const colors = document.getElementById("color");
     for (let i = 0; i < colors.length; i++) {
         if (colors.options[i].value === options.color) {
-            document.getElementById("color").selectedIndex = i;
+            colors.selectedIndex = i;
         }
     }
-    document.getElementById("gitOn").checked = Boolean(functions.git);
-    document.getElementById("gitOff").checked = !functions.git;
-    document.getElementById("svnOn").checked = Boolean(functions.svn);
-    document.getElementById("svnOff").checked = !functions.svn;
-    document.getElementById("hgOn").checked = Boolean(functions.hg);
-    document.getElementById("hgOff").checked = !functions.hg;
-    document.getElementById("envOn").checked = Boolean(functions.env);
-    document.getElementById("envOff").checked = !functions.env;
-    document.getElementById("ds_storeOn").checked = Boolean(functions.ds_store);
-    document.getElementById("ds_storeOff").checked = !functions.ds_store;
-    document.getElementById("debugOn").checked = Boolean(options.debug);
-    document.getElementById("debugOff").checked = !options.debug;
-    document.getElementById("checkFailedOn").checked = Boolean(options.check_failed);
-    document.getElementById("checkFailedOff").checked = !options.check_failed;
-    document.getElementById("max_sites").value = options.max_sites;
-    document.getElementById("request_timeout").value = options.request_timeout || 15;
-    document.getElementById("max_connections").value = download.max_connections;
-    document.getElementById("failed_in_a_row").value = download.failed_in_a_row;
-    document.getElementById("on1").checked = Boolean(notification.new_git);
-    document.getElementById("off1").checked = !notification.new_git;
-    document.getElementById("on2").checked = Boolean(notification.download);
-    document.getElementById("off2").checked = !notification.download;
-    document.getElementById("on3").checked = Boolean(options.check_opensource);
-    document.getElementById("off3").checked = !options.check_opensource;
-    document.getElementById("on4").checked = Boolean(options.check_securitytxt);
-    document.getElementById("off4").checked = !options.check_securitytxt;
+
+    // Every on/off group is a pair of radios named after the stored option.
+    const switches = {
+        git: functions.git,
+        svn: functions.svn,
+        hg: functions.hg,
+        env: functions.env,
+        ds_store: functions.ds_store,
+        debug: options.debug,
+        check_failed: options.check_failed,
+        notification_new_git: notification.new_git,
+        notification_download: notification.download,
+        check_opensource: options.check_opensource,
+        check_securitytxt: options.check_securitytxt,
+    };
+    for (const [name, value] of Object.entries(switches)) {
+        const enabled = Boolean(value);
+        document.querySelector(`input[name="${name}"][value="on"]`).checked = enabled;
+        document.querySelector(`input[name="${name}"][value="off"]`).checked = !enabled;
+    }
+
+    document.getElementById("max_sites").value = String(options.max_sites);
+    document.getElementById("request_timeout").value = String(options.request_timeout || 15);
+    document.getElementById("max_connections").value = String(download.max_connections);
+    document.getElementById("failed_in_a_row").value = String(download.failed_in_a_row);
     document.getElementById("blacklist").value = (options.blacklist || []).join(", ");
 }
 
@@ -56,45 +55,43 @@ function setupOptionsPage() {
         result.options.notification = result.options.notification || {};
         set_gui(result.options);
 
+        // Where each on/off group is stored: "functions.git", "debug", ...
+        const TOGGLE_PATHS = {
+            git: ["functions", "git"],
+            svn: ["functions", "svn"],
+            hg: ["functions", "hg"],
+            env: ["functions", "env"],
+            ds_store: ["functions", "ds_store"],
+            notification_new_git: ["notification", "new_git"],
+            notification_download: ["notification", "download"],
+            check_opensource: ["check_opensource"],
+            check_securitytxt: ["check_securitytxt"],
+            debug: ["debug"],
+            check_failed: ["check_failed"],
+        };
+
+        // Write through a path without assuming the nested object is still there.
+        function setOption(options, path, value) {
+            if (path.length === 1) {
+                options[path[0]] = value;
+                return;
+            }
+            let section = options[path[0]];
+            if (!section) {
+                section = options[path[0]] = {};
+            }
+            section[path[1]] = value;
+        }
+
         document.addEventListener("change", (e) => {
-            if (e.target.name === "git") {
-                result.options.functions.git = (e.target.value === "on");
+            const path = TOGGLE_PATHS[e.target.name];
+            if (path) {
+                const value = (e.target.value === "on");
+                setOption(result.options, path, value);
                 chrome.storage.local.set(result);
                 chrome.runtime.sendMessage({
                     type: e.target.name,
-                    value: result.options.functions.git
-                }, function (response) {
-                });
-            } else if (e.target.name === "svn") {
-                result.options.functions.svn = (e.target.value === "on");
-                chrome.storage.local.set(result);
-                chrome.runtime.sendMessage({
-                    type: e.target.name,
-                    value: result.options.functions.svn
-                }, function (response) {
-                });
-            } else if (e.target.name === "hg") {
-                result.options.functions.hg = (e.target.value === "on");
-                chrome.storage.local.set(result);
-                chrome.runtime.sendMessage({
-                    type: e.target.name,
-                    value: result.options.functions.hg
-                }, function (response) {
-                });
-            } else if (e.target.name === "env") {
-                result.options.functions.env = (e.target.value === "on");
-                chrome.storage.local.set(result);
-                chrome.runtime.sendMessage({
-                    type: e.target.name,
-                    value: result.options.functions.env
-                }, function (response) {
-                });
-            } else if (e.target.name === "ds_store") {
-                result.options.functions.ds_store = (e.target.value === "on");
-                chrome.storage.local.set(result);
-                chrome.runtime.sendMessage({
-                    type: e.target.name,
-                    value: result.options.functions.ds_store
+                    value: value
                 }, function (response) {
                 });
             } else if (e.target.id === "color") {
@@ -109,54 +106,6 @@ function setupOptionsPage() {
                 chrome.runtime.sendMessage({
                     type: e.target.id,
                     value: result.options.request_timeout
-                }, function (response) {
-                });
-            } else if (e.target.name === "notification_new_git") {
-                result.options.notification.new_git = (e.target.value === "on");
-                chrome.storage.local.set(result);
-                chrome.runtime.sendMessage({
-                    type: e.target.name,
-                    value: result.options.notification.new_git
-                }, function (response) {
-                });
-            } else if (e.target.name === "notification_download") {
-                result.options.notification.download = (e.target.value === "on");
-                chrome.storage.local.set(result);
-                chrome.runtime.sendMessage({
-                    type: e.target.name,
-                    value: result.options.notification.download
-                }, function (response) {
-                });
-            } else if (e.target.name === "check_opensource") {
-                result.options.check_opensource = (e.target.value === "on");
-                chrome.storage.local.set(result);
-                chrome.runtime.sendMessage({
-                    type: e.target.name,
-                    value: result.options.check_opensource
-                }, function (response) {
-                });
-            } else if (e.target.name === "check_securitytxt") {
-                result.options.check_securitytxt = (e.target.value === "on");
-                chrome.storage.local.set(result);
-                chrome.runtime.sendMessage({
-                    type: e.target.name,
-                    value: result.options.check_securitytxt
-                }, function (response) {
-                });
-            } else if (e.target.name === "debug") {
-                result.options.debug = (e.target.value === "on");
-                chrome.storage.local.set(result);
-                chrome.runtime.sendMessage({
-                    type: e.target.name,
-                    value: result.options.debug
-                }, function (response) {
-                });
-            } else if (e.target.name === "check_failed") {
-                result.options.check_failed = (e.target.value === "on");
-                chrome.storage.local.set(result);
-                chrome.runtime.sendMessage({
-                    type: e.target.name,
-                    value: result.options.check_failed
                 }, function (response) {
                 });
             } else if (e.target.validity.valid === true && (e.target.id === "max_connections" || e.target.id === "failed_in_a_row")) {
