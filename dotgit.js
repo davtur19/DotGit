@@ -32,6 +32,8 @@ const DEFAULT_OPTIONS = {
     ]
 };
 
+const HOST_PERMISSIONS = ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"];
+
 const EXTENSION_ICON = {
     "48": "icons/dotgit-48.png",
     "96": "icons/dotgit-96.png"
@@ -91,6 +93,9 @@ let failed_in_a_row;
 let check_failed;
 let blacklist = [];
 let compiledBlacklist = [];
+// One permission notification per browser session: the worker starts again on
+// every navigation, so without this the user would be notified continuously.
+let permissionsNotified = false;
 let processingUrls = new Set();
 let debug = false;
 
@@ -132,6 +137,7 @@ debugLog('Background script loaded');
 // listeners below are registered (and persisted) again for the new session.
 chrome.runtime.onStartup.addListener(() => {
     debugLog('Extension started');
+    void checkPermissionsOnStart();
 });
 
 chrome.runtime.onSuspend.addListener(() => {
@@ -801,6 +807,10 @@ function initStorage(result) {
         chrome.storage.local.set({options: mergedOptions});
     }
     set_options(mergedOptions);
+
+    // Permissions can be missing on any start (an update that asks for new
+    // ones, a user who withheld them): check again and tell the user.
+    void checkPermissionsOnStart();
 }
 
 
@@ -815,13 +825,59 @@ chrome.storage.local.set({
 async function requestPermissions() {
     try {
         const granted = await chrome.permissions.request({
-            origins: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"]
+            origins: HOST_PERMISSIONS
         });
         debugLog('Permission request result:', granted);
         return granted;
     } catch (error) {
         debugLog('Error requesting permissions:', error);
         return false;
+    }
+}
+
+// Host permissions can be missing after an update (Firefox asks again for new
+// ones) or because the user withheld them. Without them no check can run.
+async function hasHostPermissions() {
+    try {
+        return await chrome.permissions.contains({
+            origins: HOST_PERMISSIONS
+        });
+    } catch (error) {
+        debugLog('Error checking permissions:', error);
+        return false;
+    }
+}
+
+// A permission request must come from a user gesture, so the background can
+// only point at the popup, which has the request button. Notify once per
+// browser session: the worker restarts on every navigation.
+async function notifyMissingPermissions(title, message) {
+    if (permissionsNotified) {
+        return;
+    }
+    permissionsNotified = true;
+    try {
+        const stored = await chrome.storage.session.get("permissionsNotified");
+        if (stored.permissionsNotified) {
+            return;
+        }
+        await chrome.storage.session.set({permissionsNotified: true});
+    } catch (error) {
+        // storage.session is not available in every browser: the module flag
+        // above still avoids a notification per page in this worker.
+    }
+    notification(title, message);
+}
+
+async function checkPermissionsOnStart() {
+    try {
+        if (await hasHostPermissions()) {
+            return;
+        }
+        await notifyMissingPermissions("DotGit needs permissions",
+            "Click the extension icon and grant access so DotGit can check for exposed Git repositories.");
+    } catch (error) {
+        debugLog('Error checking permissions on start:', error);
     }
 }
 
@@ -978,13 +1034,17 @@ chrome.runtime.onInstalled.addListener(async (details) => {
         });
         // Keep the in-memory copy consistent with the reset storage.
         set_options(DEFAULT_OPTIONS);
+    }
 
-        const hasPermissions = await chrome.permissions.contains({
-            origins: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"]
-        });
-
-        if (!hasPermissions) {
-            notification("Welcome to DotGit!", "Click the extension icon to get started. You'll need to grant permissions to check for exposed Git repositories.");
+    // An update can add host permissions (Firefox asks for the new ones) or the
+    // user may have withheld them: without a check, scanning would silently do
+    // nothing. Asking for a permission needs a user gesture, so point at the
+    // popup, which has the request button, instead of failing in the background.
+    if (!(await hasHostPermissions())) {
+        if (details.reason === 'install') {
+            await notifyMissingPermissions("Welcome to DotGit!", "Click the extension icon to get started. You'll need to grant permissions to check for exposed Git repositories.");
+        } else {
+            await notifyMissingPermissions("DotGit needs permissions", "Click the extension icon and grant access so DotGit can check for exposed Git repositories.");
         }
     }
 });
