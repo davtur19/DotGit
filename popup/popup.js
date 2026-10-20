@@ -199,6 +199,16 @@ function addElements(element, array, callback, downloading, max_sites) {
             link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.env");
         }
         if (callback(array[i].type) === "ds_store") {
+            const spanBrowse = document.createElement("span");
+            spanBrowse.setAttribute("class", "secondary-content");
+            const btnBrowse = document.createElement("i");
+            btnBrowse.setAttribute("id", "dsbrowse:" + callback(array[i].url));
+            btnBrowse.setAttribute("class", "material-icons btn-small amber darken-3 browse-dsstore");
+            btnBrowse.setAttribute("title", "Download the parsed .DS_Store tree (text file)");
+            btnBrowse.innerText = "folder_open";
+            spanBrowse.appendChild(btnBrowse);
+            listItem.appendChild(spanBrowse);
+
             if (callback(array[i].securitytxt) !== "false" && callback(array[i].securitytxt) !== "undefined") {
                 listItem.appendChild(spanSecuritytxtStatus);
             }
@@ -260,6 +270,9 @@ document.addEventListener("click", async (event) => {
             }
             setFoundTitle(response.remaining);
         });
+    } else if (button.classList.contains("browse-dsstore")) {
+        const url = button.id.substring("dsbrowse:".length);
+        downloadDSStoreTree(url, button);
     } else if (button.id === "options") {
         if (chrome.runtime.openOptionsPage) {
             chrome.runtime.openOptionsPage();
@@ -405,3 +418,110 @@ document.addEventListener("DOMContentLoaded", async function () {
         document.getElementById('permissions-banner').style.display = 'none';
     }
 });
+
+
+// ── DS_Store tree export ───────────────────────────────────────────────────
+//
+// One click on the amber folder icon exports the site's .DS_Store as a plain
+// text file in the style of the terminal "tree" command. A .DS_Store only
+// names the entries of one directory, so each entry is probed once for its own
+// .DS_Store: those that answer are folders, the rest are plain file names.
+// There is no panel to navigate: the only output is the downloaded file.
+
+const MAX_DS_STORE_BYTES = 20 * 1024 * 1024;
+const MAX_DS_STORE_DEPTH = 10;   // a malformed or self-referencing file must not loop forever
+
+// Sorted string[] of names parsed from baseUrl/.DS_Store, or null when the
+// request fails or the data is unusable: for the walker everything is a leaf.
+async function dssFetchEntries(baseUrl) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), fetchTimeoutMs);
+
+    try {
+        const response = await fetch(baseUrl + "/.DS_Store", {
+            cache: "no-store",
+            signal: controller.signal
+        });
+        if (response.status !== 200) return null;
+
+        // The body comes from the site: never buffer an unbounded one in the
+        // popup. A real .DS_Store is a few MB even for a huge folder.
+        const declared = Number(response.headers.get("content-length"));
+        if (Number.isFinite(declared) && declared > MAX_DS_STORE_BYTES) return null;
+        const buffer = await response.arrayBuffer();
+        if (buffer.byteLength > MAX_DS_STORE_BYTES) return null;
+        return parseDSStore(buffer);
+    } catch (error) {
+        return null;   // abort, network error, invalid format: all are leaves
+    } finally {
+        // Also covers the body: the abort must stay armed until it has settled.
+        clearTimeout(timer);
+    }
+}
+
+// Appends the tree lines of one directory to `out`. Serial on purpose: a weak
+// server receives at most one request at a time.
+async function dssPushEntries(baseUrl, entries, prefix, depth, out) {
+    for (let i = 0; i < entries.length; i++) {
+        const name = entries[i];
+        if (name === "..") continue;   // it would escape the site root
+        const isLast = i === entries.length - 1;
+        const childUrl = baseUrl + "/" + encodeURIComponent(name);
+        const line = prefix + (isLast ? "└─ " : "├─ ") + name;
+        const childPrefix = prefix + (isLast ? "   " : "│  ");
+
+        const childEntries = depth < MAX_DS_STORE_DEPTH ? await dssFetchEntries(childUrl) : null;
+        if (childEntries === null) {
+            out.push(line);
+            continue;
+        }
+        out.push(line + "/");
+        await dssPushEntries(childUrl, childEntries, childPrefix, depth + 1, out);
+    }
+}
+
+// Fetch the site's root .DS_Store, walk its folders and save the tree.
+async function downloadDSStoreTree(siteUrl, button) {
+    if (button.classList.contains("disabled")) return;
+    button.classList.add("disabled");
+    const restore = () => {
+        button.setAttribute("class", "material-icons btn-small amber darken-3 browse-dsstore");
+        button.textContent = "folder_open";
+    };
+
+    button.textContent = "hourglass_empty";
+
+    const rootEntries = await dssFetchEntries(siteUrl);
+    if (!rootEntries) {
+        // The finding is stale (timed out, moved, junk data): the icon says so.
+        button.setAttribute("class", "material-icons btn-small red darken-3 browse-dsstore");
+        button.textContent = "folder_open";
+        debugLog("DotGit: could not read " + siteUrl + "/.DS_Store");
+        return;
+    }
+
+    const lines = [new URL(siteUrl).host + "/"];
+    try {
+        await dssPushEntries(siteUrl, rootEntries, "", 1, lines);
+    } catch (error) {
+        debugLog("DotGit: .DS_Store tree failed:", error);
+    }
+    restore();
+    if (lines.length > 1) {
+        dssDownloadText(new URL(siteUrl).host, lines.join("\n") + "\n");
+    }
+}
+
+function dssDownloadText(host, text) {
+    const filename = host.replace(/:/g, "_") + ".dsstore.txt";
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+
+    if (chrome.downloads && chrome.downloads.download) {
+        chrome.downloads.download({ url: url, filename: filename, saveAs: false });
+        return;
+    }
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+}
