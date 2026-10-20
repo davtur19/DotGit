@@ -12,7 +12,10 @@ let HREF_PREFIX = IS_FIREFOX ? "view-source:" : "";
 // The material icon font is gone: the <i>/<a> elements carry the colours,
 // sizes and radius, and the icon itself is a packaged svg swapped in here.
 function setIcon(host, name) {
-    host.innerHTML = '<img src="' + chrome.runtime.getURL("icons/" + name + ".svg") + '" alt="">';
+    const img = document.createElement("img");
+    img.setAttribute("src", chrome.runtime.getURL("icons/" + name + ".svg"));
+    img.setAttribute("alt", "");
+    host.replaceChildren(img);
 }
 
 let debug = false;
