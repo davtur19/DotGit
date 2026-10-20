@@ -1,3 +1,5 @@
+"use strict";
+
 if (typeof window.dotGitInjected === 'undefined') {
     window.dotGitInjected = true;
 

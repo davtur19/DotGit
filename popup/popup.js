@@ -1,6 +1,8 @@
 // Firefox exposes browser.* (and needs the "view-source:" prefix), but recent
 // Chromium versions define a global `browser` object too, so testing the
 // namespace alone is not a Firefox test. getBrowserInfo only exists on Firefox.
+"use strict";
+
 const IS_FIREFOX = typeof browser !== "undefined" &&
     typeof browser.runtime?.getBrowserInfo === "function";
 

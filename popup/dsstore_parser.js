@@ -4,6 +4,7 @@
 // or throws an Error with a descriptive message if the file is invalid.
 //
 // Format reference: Mark Mentovai's reverse-engineering notes (https://wiki.mozilla.org/DS_Store_File_Format).
+"use strict";
 
 function readU32(pos, buffer, view) {
     if (pos + 4 > buffer.byteLength) throw new TypeError('RU32: Unexpected end of file at 0x' + pos.toString(16));

@@ -1,3 +1,5 @@
+"use strict";
+
 function set_gui(options) {
     // The page can load before the background has merged the defaults into an
     // older options object: never assume the nested keys exist.
