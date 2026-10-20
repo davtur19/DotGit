@@ -774,10 +774,14 @@ function initStorage(result) {
     const withExposedGit = Array.isArray(result.withExposedGit) ? result.withExposedGit : [];
     const storedOptions = isPlainObject(result.options) ? result.options : null;
 
-    if (!Array.isArray(result.checked)) {
+    // A missing list is not written back: the read that produced `result`
+    // happens while the worker boots, and the write would land a moment later,
+    // possibly after the scanner had already stored a finding (which it then
+    // wiped). Every reader already treats a missing list as empty.
+    if (result.checked !== undefined && !Array.isArray(result.checked)) {
         chrome.storage.local.set({checked: checked});
     }
-    if (!Array.isArray(result.withExposedGit)) {
+    if (result.withExposedGit !== undefined && !Array.isArray(result.withExposedGit)) {
         chrome.storage.local.set({withExposedGit: withExposedGit});
     }
     if (!storedOptions) {
