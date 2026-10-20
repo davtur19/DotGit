@@ -161,6 +161,13 @@ function notification(title, message) {
         return;
     }
 
+    // The notification is a side effect: if a browser build lacks the API (and
+    // Firefox for Android lacks several), the finding that was just stored must
+    // not turn into an error response.
+    if (typeof chrome.notifications === "undefined") {
+        return;
+    }
+
     chrome.notifications.create({
         type: "basic",
         iconUrl: chrome.runtime.getURL(EXTENSION_ICON["48"]),
@@ -794,7 +801,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const removed = await withStorageLock(async () => {
                     const {withExposedGit = []} = await chrome.storage.local.get(["withExposedGit"]);
                     const index = withExposedGit.findIndex((item) =>
-                        item && item.url === origin && item.type === findingType);
+                        item && item.type === findingType && normalizeOrigin(item.url) === origin);
                     if (index === -1) {
                         return false;
                     }

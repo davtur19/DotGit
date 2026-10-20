@@ -246,7 +246,9 @@ if (typeof window.dotGitInjected === 'undefined') {
             });
 
             if (response.status === 200) {
-                const text = await readText(response, 1024 * 1024);
+                // Only the first 8 bytes matter, but a .DS_Store of a folder with
+                // tens of thousands of entries is a few MB: do not cut it short.
+                const text = await readText(response, 5 * 1024 * 1024);
                 if (text !== null && text.startsWith(DS_STORE_HEADER)) {
                     return true;
                 }
