@@ -20,6 +20,16 @@ function themeColor(value) {
     return THEME_COLORS.includes(color) ? color : "grey";
 }
 
+// A server that accepts the .DS_Store request and never answers used to leave
+// the overlay on "Loading..." for as long as the popup stayed open. Same option
+// and same range as the checks in the content script.
+let fetchTimeoutMs = 15000;
+
+function setFetchTimeout(value) {
+    const seconds = Number(value);
+    fetchTimeoutMs = (Number.isFinite(seconds) ? Math.min(Math.max(seconds, 5), 300) : 15) * 1000;
+}
+
 // Open Source Initiative keyhole, drawn inline so the list needs no extra
 // request: "public" (a globe) said little about a repository being open source.
 // Vector by Colin Viebrock for the Open Source Initiative, CC BY 2.5.
@@ -290,6 +300,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const maxSites = Number.isFinite(storedMaxSites)
             ? Math.min(Math.max(Math.trunc(storedMaxSites), 1), 1000000000)
             : 100;
+        setFetchTimeout(visitedSite.options?.request_timeout);
         document.getElementById("hostsFoundTitle").textContent =
             "Total found: 0 Max shown: " + maxSites;
         if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
@@ -446,13 +457,29 @@ function dssEntryUrl(baseUrl, name) {
 // parse failures do not, so callers can tell "not a browsable folder" from
 // "the request itself failed".
 async function dssFetchEntries(baseUrl) {
-    const response = await fetch(baseUrl + "/.DS_Store", {cache: "no-store"});
-    if (response.status !== 200) {
-        const error = new Error("HTTP " + response.status);
-        error.status = response.status;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), fetchTimeoutMs);
+
+    try {
+        const response = await fetch(baseUrl + "/.DS_Store", {
+            cache: "no-store",
+            signal: controller.signal
+        });
+        if (response.status !== 200) {
+            const error = new Error("HTTP " + response.status);
+            error.status = response.status;
+            throw error;
+        }
+        return parseDSStore(await response.arrayBuffer());
+    } catch (error) {
+        if (error.name === "AbortError") {
+            throw new Error("timed out after " + (fetchTimeoutMs / 1000) + " s");
+        }
         throw error;
+    } finally {
+        // Also covers the body: the abort must stay armed until it has settled.
+        clearTimeout(timer);
     }
-    return parseDSStore(await response.arrayBuffer());
 }
 
 // Open the overlay and fetch the root-level .DS_Store for the given site URL.

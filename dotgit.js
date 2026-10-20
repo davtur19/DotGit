@@ -111,6 +111,17 @@ function withStorageLock(task) {
     return result;
 }
 
+// `checked` and `withExposedGit` are the only state that grows while browsing.
+// Storage has no useful per-key quota, so keep them finite: the cap is far
+// above any real profile (100k origins), and the oldest entries go first.
+const MAX_STORED_ENTRIES = 100000;
+
+function capList(list) {
+    return list.length > MAX_STORED_ENTRIES
+        ? list.slice(list.length - MAX_STORED_ENTRIES)
+        : list;
+}
+
 async function isChecked(origin) {
     const {checked = []} = await chrome.storage.local.get(["checked"]);
     return checked.includes(origin);
@@ -121,7 +132,7 @@ async function markChecked(origin) {
         const {checked = []} = await chrome.storage.local.get(["checked"]);
         if (!checked.includes(origin)) {
             checked.push(origin);
-            await chrome.storage.local.set({checked});
+            await chrome.storage.local.set({checked: capList(checked)});
         }
     });
 }
@@ -644,7 +655,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                     }
 
                     if (added.length > 0) {
-                        await chrome.storage.local.set({withExposedGit});
+                        await chrome.storage.local.set({withExposedGit: capList(withExposedGit)});
                         await setBadge();
                     }
 
@@ -746,7 +757,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                     }
 
                     checked.add(origin);
-                    await chrome.storage.local.set({checked: [...checked]});
+                    await chrome.storage.local.set({checked: capList([...checked])});
                     return true;
                 });
 
