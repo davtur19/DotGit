@@ -33,10 +33,6 @@ if (typeof window.dotGitInjected === 'undefined') {
     ];
 
     const ENV_PATH = "/.env";
-    // dotenv keys are lowercase far more often than the uppercase convention
-    // suggests (Node's own .env parser accepts both, dotenv-linter warns about
-    // lowercase keys): accept any valid key, but not "name = value" with spaces.
-    const ENV_SEARCH = "^[A-Za-z_][A-Za-z0-9_]*=|^[#\\n\\r ][\\s\\S]*^[A-Za-z_][A-Za-z0-9_]*=";
 
     const DS_STORE = "/.DS_Store";
     const DS_STORE_HEADER = "\x00\x00\x00\x01Bud1";
@@ -146,10 +142,37 @@ if (typeof window.dotGitInjected === 'undefined') {
         return false;
     }
 
+    // A page that answers 200 with prose (a soft 404, an SPA fallback) can still
+    // contain "something=value", and a 404 page can echo the requested path. A
+    // dotenv file, on the other hand, starts with an assignment (or comments) and
+    // is mostly made of them, so check the shape instead of a single match.
+    // Keys may be lowercase/mixed case: Node's own .env parser accepts them.
+    function looksLikeEnvFile(text) {
+        const isAssignment = (line) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(line);
+        let first = null;
+        let assignments = 0;
+        let meaningful = 0;
+
+        for (const raw of text.split(/\r?\n/)) {
+            const line = raw.trim();
+            if (line === "" || line.startsWith("#")) {
+                continue;
+            }
+            if (first === null) {
+                first = line;
+            }
+            meaningful++;
+            if (isAssignment(line)) {
+                assignments++;
+            }
+        }
+
+        return first !== null && isAssignment(first) && assignments / meaningful >= 0.5;
+    }
+
     // Check for exposed .env file
     async function checkEnv(url) {
         const to_check = url + ENV_PATH;
-        const search = new RegExp(ENV_SEARCH, "gm");
 
         try {
             const response = await fetchWithTimeout(to_check, {
@@ -157,10 +180,7 @@ if (typeof window.dotGitInjected === 'undefined') {
             });
 
             if (response.status === 200) {
-                const text = await response.text();
-                if (search.test(text)) {
-                    return true;
-                }
+                return looksLikeEnvFile(await response.text());
             }
         } catch (error) {
             // Ignore error
