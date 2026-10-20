@@ -39,10 +39,14 @@ function set_gui(options) {
     document.getElementById("blacklist").value = (options.blacklist || []).join(", ");
 }
 
-document.addEventListener("DOMContentLoaded", function () {
+function setupOptionsPage() {
     chrome.storage.local.get(["options"], function (result) {
-        // The page can load before the background has written the defaults.
-        if (!result.options) return;
+        // The page can load before the background has written the defaults:
+        // try again instead of leaving it with no listeners at all.
+        if (!result.options) {
+            setTimeout(setupOptionsPage, 200);
+            return;
+        }
         // Nested keys can be missing when upgrading from an older version.
         result.options.functions = result.options.functions || {};
         result.options.download = result.options.download || {};
@@ -170,10 +174,18 @@ document.addEventListener("DOMContentLoaded", function () {
                 chrome.runtime.sendMessage({
                     type: "reset_options"
                 }, function (response) {
-                    set_gui(response.options);
+                    // The handlers below write the whole object: keep the one
+                    // they mutate in sync with what the reset just stored,
+                    // otherwise the next change restores the old values.
+                    if (response && response.options) {
+                        result.options = response.options;
+                        set_gui(result.options);
+                    }
                 });
             }
         });
 
     });
-});
+}
+
+document.addEventListener("DOMContentLoaded", setupOptionsPage);
