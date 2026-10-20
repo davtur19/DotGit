@@ -203,7 +203,7 @@ function addElements(element, array, callback, downloading, max_sites) {
             spanBrowse.setAttribute("class", "secondary-content");
             const btnBrowse = document.createElement("i");
             btnBrowse.setAttribute("id", "dsbrowse:" + callback(array[i].url));
-            btnBrowse.setAttribute("class", "material-icons btn-small green browse-dsstore");
+            btnBrowse.setAttribute("class", "material-icons btn-small amber darken-3 browse-dsstore");
             btnBrowse.setAttribute("title", "Browse .DS_Store file listing");
             btnBrowse.innerText = "folder_open";
             spanBrowse.appendChild(btnBrowse);
@@ -273,10 +273,8 @@ document.addEventListener("click", async (event) => {
     } else if (button.classList.contains("browse-dsstore")) {
         const url = button.id.substring("dsbrowse:".length);
         openDsStoreBrowser(url);
-    } else if (button.id === "dss-back") {
+    } else if (button.closest && button.closest("#dss-back")) {
         dssNavigateBack();
-    } else if (button.id === "dss-close") {
-        dssClose();
     } else if (button.id === "options") {
         if (chrome.runtime.openOptionsPage) {
             chrome.runtime.openOptionsPage();
@@ -286,6 +284,14 @@ document.addEventListener("click", async (event) => {
     } else if (button.id === "about") {
         window.open(chrome.runtime.getURL('about.html'));
     }
+});
+
+// The back control is a link without an href, so Enter/Space need handling.
+document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    if (!event.target.closest || !event.target.closest("#dss-back")) return;
+    event.preventDefault();
+    dssNavigateBack();
 });
 
 function setFoundTitle(count) {
@@ -436,10 +442,6 @@ document.addEventListener("DOMContentLoaded", async function () {
 
 let dssStack = [];
 
-function dssSetBackVisibility() {
-    document.getElementById("dss-back-li").style.display = dssStack.length > 1 ? "" : "none";
-}
-
 function dssOpenEntryInBackground(url) {
     if (chrome.tabs && chrome.tabs.create) {
         chrome.tabs.create({ url, active: false });
@@ -523,7 +525,7 @@ async function openDsStoreBrowser(siteUrl) {
     statusEl.textContent = "Loading...";
     pathEl.textContent = siteUrl;
     pathEl.title = siteUrl + "/.DS_Store";
-    dssSetBackVisibility();
+    document.body.classList.add("dss-open");
     overlay.style.display = "flex";
 
     await dssNavigateTo(siteUrl);
@@ -572,7 +574,6 @@ async function dssNavigateTo(baseUrl, presetEntries) {
     }
 
     dssStack.push({ baseUrl, entries });
-    dssSetBackVisibility();
 
     if (entries.length === 0) {
         statusEl.textContent = "No entries found in .DS_Store.";
@@ -593,17 +594,18 @@ function dssRenderEntries(baseUrl, entries, listEl) {
         li.setAttribute("class", "collection-item dss-entry");
         li.tabIndex = 0;
         li.setAttribute("role", "button");
-        li.setAttribute("title", "Open: browse here if it has its own .DS_Store, otherwise a new tab");
+        li.setAttribute("title", name);
+
+        const label = document.createElement("span");
+        label.setAttribute("class", "dss-name");
+        label.textContent = name;
 
         const icon = document.createElement("i");
         icon.setAttribute("class", "material-icons");
         icon.textContent = "chevron_right";
 
-        const label = document.createElement("span");
-        label.textContent = name;
-
-        li.appendChild(icon);
         li.appendChild(label);
+        li.appendChild(icon);
         listEl.appendChild(li);
 
         li.addEventListener("click", (event) => {
@@ -651,9 +653,12 @@ async function dssOpenEntry(li, baseUrl, name) {
     await dssNavigateTo(entryUrl, entries);
 }
 
-// Navigate back one level in the directory stack.
+// Navigate back one level, or leave the browser at the site root.
 function dssNavigateBack() {
-    if (dssStack.length <= 1) return;
+    if (dssStack.length <= 1) {
+        dssClose();
+        return;
+    }
 
     // Always show overlay before navigation
     const overlay = document.getElementById("dss-overlay");
@@ -670,8 +675,6 @@ function dssNavigateBack() {
     statusEl.style.display = "none";
     listEl.innerHTML = '';
     dssRenderEntries(prev.baseUrl, prev.entries, listEl);
-
-    dssSetBackVisibility();
 }
 
 // Close the overlay and reset state.
@@ -685,5 +688,5 @@ function dssClose() {
     listEl.innerHTML = '';
     statusEl.style.display = "none";
     statusEl.textContent = "Loading...";
-    dssSetBackVisibility();
+    document.body.classList.remove("dss-open");
 }
