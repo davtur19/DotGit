@@ -1,15 +1,33 @@
-@media (prefers-color-scheme: dark) {
-    body {
-        background-color: #202023;
-        color: #f9f9fa;
-    }
+/* The page is rendered inside about:addons in Firefox and in a normal tab in
+   Chromium. `color-scheme` lets the browser paint the canvas and the native
+   controls (radios, number inputs, textarea, buttons) with the theme in use,
+   instead of a white textarea on a dark panel. */
+:root {
+    color-scheme: light dark;
+}
+
+body {
+    /* Body margins collapse and leave a 1px overflow inside the about:addons
+       frame; padding cannot collapse and keeps the height exact. */
+    margin: 0;
+    padding: 8px 16px 16px;
+    font-family: system-ui, sans-serif;
+    font-size: 14px;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
 }
 
 .option {
     display: flex;
     flex-direction: column;
     margin-top: 10px;
-    border-bottom: 1px solid rgba(249, 249, 250, 0.2);
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.35);
 }
 
 .title-option {
@@ -23,12 +41,19 @@
     max-width: 320px;
 }
 
-a:visited {
+a {
     color: #0060df;
+}
+
+@media (prefers-color-scheme: dark) {
+    a {
+        color: #45a1ff;
+    }
 }
 
 a:hover {
     color: #45a1ff;
+    text-decoration: underline;
 }
 
 .textarea {
