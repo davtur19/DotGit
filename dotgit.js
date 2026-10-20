@@ -202,6 +202,14 @@ function startDownload(baseUrl, downloadFinished) {
     const downloadedFiles = [];
     const walkedPaths = new Set();
 
+    // A hostile server can answer every object hash with another valid tree, so
+    // the walk has no natural end. These limits sit far above any real .git
+    // dump: when one is reached the crawl stops and the zip keeps what was
+    // already fetched, with `truncated: 1` in its stats.
+    const MAX_DOWNLOAD_FILES = 200000;
+    const MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024;
+    let downloadedBytes = 0;
+
     let fileExist = false;
     let downloadStats = {};
     let failedInARow = 0;
@@ -287,6 +295,10 @@ function startDownload(baseUrl, downloadFinished) {
         if (failedInARow > failed_in_a_row) {
             return;
         }
+        if (walkedPaths.size >= MAX_DOWNLOAD_FILES || downloadedBytes >= MAX_DOWNLOAD_BYTES) {
+            downloadStats.truncated = 1;
+            return;
+        }
         walkedPaths.add(path);
         pendingCount++;
         downloadStatus.total++;
@@ -322,6 +334,7 @@ function startDownload(baseUrl, downloadFinished) {
         }).then(function (buffer) {
             if (typeof buffer !== "undefined") {
                 downloadedFiles.push([path, buffer]);
+                downloadedBytes += buffer.byteLength;
                 // noinspection JSCheckFunctionSignatures
                 const words = new Uint8Array(buffer);
 
