@@ -519,6 +519,35 @@ function needsOptionsDefaults(default_options, storage_options) {
 }
 
 
+// The content script cannot fetch github/gitlab (the page CORS applies), while
+// the background can thanks to the host permissions. Only the two repository
+// hosts are probed, so a crafted .git/config cannot make the extension request
+// an arbitrary (internal) address; the abort keeps a silent host from stalling.
+async function isReachableRepository(url) {
+    let timer;
+    try {
+        const target = new URL(url);
+        // owner/repo, not a user, an org or a feature page: those answer 200 too.
+        const segments = target.pathname.split("/").filter(Boolean);
+        const allowed = (target.hostname === "github.com" || target.hostname === "gitlab.com") &&
+            (target.protocol === "https:" || target.protocol === "http:") &&
+            segments.length >= 2;
+        if (!allowed) {
+            return false;
+        }
+        const controller = new AbortController();
+        timer = setTimeout(() => controller.abort(), 30000);
+        const response = await fetch(target.href, {signal: controller.signal});
+        return response.status === 200;
+    } catch (error) {
+        debugLog('Open source check failed:', error);
+        return false;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     debugLog('Received message:', msg.type);
 
@@ -645,35 +674,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         })();
         return true;
     } else if (msg.type === "CHECK_OPEN_SOURCE") {
-        // The content script cannot fetch github/gitlab (the page CORS applies);
-        // the background can, thanks to the host permissions. Only the two hosts
-        // the .git/config rule accepts are probed, so a crafted config cannot
-        // turn this into a request to an arbitrary (internal) address.
-        (async () => {
-            try {
-                const target = new URL(msg.url);
-                const allowed = /(^|\.)(github\.com|gitlab\.com)$/.test(target.hostname) &&
-                    (target.protocol === "https:" || target.protocol === "http:");
-                if (!allowed) {
-                    sendResponse({open: false});
-                    return;
-                }
-                const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), 30000);
-                try {
-                    const response = await fetch(target.href, {
-                        redirect: "follow",
-                        signal: controller.signal
-                    });
-                    sendResponse({open: response.status === 200});
-                } finally {
-                    clearTimeout(timer);
-                }
-            } catch (error) {
-                debugLog('Open source check failed:', error);
-                sendResponse({open: false});
-            }
-        })();
+        isReachableRepository(msg.url).then((open) => sendResponse({open}));
         return true;
     }
 

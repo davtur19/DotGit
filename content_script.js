@@ -258,54 +258,28 @@ if (typeof window.dotGitInjected === 'undefined') {
         return false;
     }
 
-    // Cross-origin requests run in the page context and are blocked by the
-    // page's CORS policy: the background owns the host permissions, so it is
-    // the one that probes github/gitlab.
-    async function checkOpenSource(url) {
-        return new Promise((resolve) => {
-            // A background that never answers must not hold the whole scan: the
-            // probe is only an icon, report the finding without it. Five seconds
-            // more than the background abort, so a slow answer still arrives.
-            const timer = setTimeout(() => resolve(false), 35000);
-            chrome.runtime.sendMessage({type: "CHECK_OPEN_SOURCE", url: url}, function (response) {
-                clearTimeout(timer);
-                void chrome.runtime.lastError;
-                resolve(response && response.open === true ? url : false);
-            });
-        });
+    // The page's CORS policy blocks cross-origin fetches to github/gitlab, so the
+    // background probes the repository page; it always answers (its fetch has a
+    // 30 s timeout), and a closed port just means "not open source".
+    function checkOpenSource(url) {
+        return chrome.runtime.sendMessage({type: "CHECK_OPEN_SOURCE", url: url})
+            .then((response) => (response && response.open === true ? url : false))
+            .catch(() => false);
+    }
+
+    // Turn a git remote into its repository page: git@host:path, ssh://git@host/path
+    // and plain host/path (the config often omits the scheme).
+    function repoPageUrl(remote) {
+        const str = remote.trim()
+            .replace(/^git@([^:]+):/, "https://$1/")
+            .replace(/^ssh:\/\/git@/, "https://")
+            .replace(/\.git$/, "");
+        return /^https?:\/\//.test(str) ? str : "https://" + str;
     }
 
     async function isOpenSource(url) {
-        let configUrl;
-        let str = "";
-
-        configUrl = await checkGitConfig(url);
-
-        if (configUrl !== false) {
-            str = configUrl.replace("github.com:", "github.com/");
-            str = str.replace("gitlab.com:", "gitlab.com/");
-            if (str.startsWith("ssh://")) {
-                str = str.substring(6);
-            }
-            if (str.startsWith("git@")) {
-                str = str.substring(4);
-            }
-            if (str.endsWith(".git")) {
-                str = str.substring(0, str.length - 4);
-            }
-            if (str.startsWith("http") === false) {
-                str = "https://" + str;
-            }
-
-            try {
-                new URL(str);
-                return await checkOpenSource(str);
-            } catch (_) {
-                return false;
-            }
-        }
-
-        return false;
+        const remote = await checkGitConfig(url);
+        return remote === false ? false : checkOpenSource(repoPageUrl(remote));
     }
 
     async function checkSite(url, options) {
