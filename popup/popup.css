@@ -1,6 +1,8 @@
 body {
     display: flex;
-    min-height: 100vh;
+    /* No min-height in viewport units here: in a popup `vh` resolves to the
+       popup window height, so the document can never shrink below the size it
+       had when it was opened (clearing the list left a tall empty popup). */
     min-width: 400px;
     flex-direction: column;
     font-size: 1rem;
