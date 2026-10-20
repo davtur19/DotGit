@@ -11,31 +11,31 @@ function set_gui(options) {
             document.getElementById("color").selectedIndex = i;
         }
     }
-    document.getElementById("gitOn").checked = !!functions.git;
+    document.getElementById("gitOn").checked = Boolean(functions.git);
     document.getElementById("gitOff").checked = !functions.git;
-    document.getElementById("svnOn").checked = !!functions.svn;
+    document.getElementById("svnOn").checked = Boolean(functions.svn);
     document.getElementById("svnOff").checked = !functions.svn;
-    document.getElementById("hgOn").checked = !!functions.hg;
+    document.getElementById("hgOn").checked = Boolean(functions.hg);
     document.getElementById("hgOff").checked = !functions.hg;
-    document.getElementById("envOn").checked = !!functions.env;
+    document.getElementById("envOn").checked = Boolean(functions.env);
     document.getElementById("envOff").checked = !functions.env;
-    document.getElementById("ds_storeOn").checked = !!functions.ds_store;
+    document.getElementById("ds_storeOn").checked = Boolean(functions.ds_store);
     document.getElementById("ds_storeOff").checked = !functions.ds_store;
-    document.getElementById("debugOn").checked = !!options.debug;
+    document.getElementById("debugOn").checked = Boolean(options.debug);
     document.getElementById("debugOff").checked = !options.debug;
-    document.getElementById("checkFailedOn").checked = !!options.check_failed;
+    document.getElementById("checkFailedOn").checked = Boolean(options.check_failed);
     document.getElementById("checkFailedOff").checked = !options.check_failed;
     document.getElementById("max_sites").value = options.max_sites;
     document.getElementById("request_timeout").value = options.request_timeout || 15;
     document.getElementById("max_connections").value = download.max_connections;
     document.getElementById("failed_in_a_row").value = download.failed_in_a_row;
-    document.getElementById("on1").checked = !!notification.new_git;
+    document.getElementById("on1").checked = Boolean(notification.new_git);
     document.getElementById("off1").checked = !notification.new_git;
-    document.getElementById("on2").checked = !!notification.download;
+    document.getElementById("on2").checked = Boolean(notification.download);
     document.getElementById("off2").checked = !notification.download;
-    document.getElementById("on3").checked = !!options.check_opensource;
+    document.getElementById("on3").checked = Boolean(options.check_opensource);
     document.getElementById("off3").checked = !options.check_opensource;
-    document.getElementById("on4").checked = !!options.check_securitytxt;
+    document.getElementById("on4").checked = Boolean(options.check_securitytxt);
     document.getElementById("off4").checked = !options.check_securitytxt;
     document.getElementById("blacklist").value = (options.blacklist || []).join(", ");
 }
