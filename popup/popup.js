@@ -11,6 +11,15 @@ let HREF_PREFIX = IS_FIREFOX ? "view-source:" : "";
 
 let debug = false;
 
+// Open Source Initiative keyhole, drawn inline so the list needs no extra
+// request: "public" (a globe) said little about a repository being open source.
+// Vector by Colin Viebrock for the Open Source Initiative, CC BY 2.5.
+const OPEN_SOURCE_ICON =
+    '<svg viewBox="0 0 590 590" aria-hidden="true" focusable="false"><path d="M328.7 395.8c40.3-15 61.4-43.8 ' +
+    '61.4-93.4S348.3 209 296 208.9c-55.1-.1-96.8 43.6-96.1 93.5s24.4 83 62.4 94.9L195 563C104.8 539.7 13.2 ' +
+    '433.3 13.2 302.4 13.2 147.3 137.8 21.5 294 21.5s282.8 125.7 282.8 280.8c0 133-90.8 237.9-182.9 ' +
+    '261.1L328.7 395.8z"/></svg>';
+
 function debugLog(...args) {
     if (debug) {
         console.log('[DotGit]', ...args);
@@ -88,7 +97,7 @@ function addElements(element, array, callback, downloading, max_sites) {
         const spanSecuritytxtStatus = document.createElement("span");
         spanSecuritytxtStatus.setAttribute("class", "secondary-content");
         const securitytxtStatus = document.createElement("a");
-        securitytxtStatus.setAttribute("class", "material-icons btn-small security");
+        securitytxtStatus.setAttribute("class", "material-icons btn-small security-color security");
         securitytxtStatus.setAttribute("title", "The Website has security.txt");
         securitytxtStatus.setAttribute("href", HREF_PREFIX + callback(array[i].securitytxt));
         securitytxtStatus.innerText = "security";
@@ -118,10 +127,10 @@ function addElements(element, array, callback, downloading, max_sites) {
             downloadStatus.innerText = "";
 
             const openSourceStatus = document.createElement("a");
-            openSourceStatus.setAttribute("class", "material-icons btn-small public");
+            openSourceStatus.setAttribute("class", "btn-small opensource-color opensource");
             openSourceStatus.setAttribute("title", "The Website is OpenSource");
             openSourceStatus.setAttribute("href", callback(array[i].open));
-            openSourceStatus.innerText = "public";
+            openSourceStatus.innerHTML = OPEN_SOURCE_ICON;
 
             link.setAttribute("href", HREF_PREFIX + callback(array[i].url) + "/.git/config");
             // Firefox for Android has no downloads API (removed in 79): the scan

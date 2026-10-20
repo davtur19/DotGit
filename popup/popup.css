@@ -30,6 +30,33 @@ ul.collection {
     margin-left: 4px;
 }
 
+/* Both used to inherit the stock button teal, so a repository that is open
+   source and one that publishes security.txt looked identical. */
+.opensource-color {
+    background-color: #4caf50 !important;
+}
+
+.security-color {
+    background-color: #7e57c2 !important;
+}
+
+/* The open source mark is an SVG instead of a font ligature. */
+.opensource {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: #fff;
+}
+
+.opensource svg {
+    display: block;
+    width: 15px;
+    height: 15px;
+    fill: currentColor;
+}
+
 .download-status {
     padding: 0 10px;
     height: auto;
