@@ -148,15 +148,55 @@ if (typeof window.dotGitInjected === 'undefined') {
     // is mostly made of them, so check the shape instead of a single match.
     // Keys may be lowercase/mixed case: Node's own .env parser accepts them.
     function looksLikeEnvFile(text) {
-        const isAssignment = (line) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(line);
+        // A dotenv file is text: a binary object (an image, a gzip) served at
+        // /.env decodes with control bytes or replacement characters.
+        if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFD]/.test(text)) {
+            return false;
+        }
+        // `export KEY=value` is how shell-sourced env files are written, and it is
+        // common enough in the wild to be accepted here.
+        const isAssignment = (line) => /^(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*=/.test(line);
+        // A double-quoted value may span several lines (dotenv keeps the line
+        // breaks), so those lines belong to the assignment, not to the prose. The
+        // quote count accumulates across lines: the value ends when it is even.
+        const countQuotes = (value) => {
+            let quotes = 0;
+            for (let i = 0; i < value.length; i++) {
+                if (value[i] === "\\") {
+                    i++;
+                } else if (value[i] === '"') {
+                    quotes++;
+                }
+            }
+            return quotes;
+        };
+        // A page that only opens a quote must not swallow its whole body.
+        const MAX_VALUE_LINES = 200;
         let first = null;
         let assignments = 0;
         let meaningful = 0;
+        let quotes = 0;
+        let valueLines = 0;
 
         for (const raw of text.split(/\r?\n/)) {
             const line = raw.trim();
+            if (valueLines > 0) {
+                quotes += countQuotes(line);
+                valueLines++;
+                if (quotes % 2 === 0 || valueLines > MAX_VALUE_LINES) {
+                    valueLines = 0;
+                }
+                continue;
+            }
             if (line === "" || line.startsWith("#")) {
                 continue;
+            }
+            // HTML/XML/PHP pages (soft 404, SPA fallback, an error page that
+            // answers 200) can contain "key=value" in a script or an attribute.
+            // A dotenv line never starts with "<", so reject the whole document
+            // instead of counting those lines as prose.
+            if (line.startsWith("<")) {
+                return false;
             }
             if (first === null) {
                 first = line;
@@ -164,19 +204,40 @@ if (typeof window.dotGitInjected === 'undefined') {
             meaningful++;
             if (isAssignment(line)) {
                 assignments++;
+                const value = line.slice(line.indexOf("=") + 1).trim();
+                // A page that echoes the requested path ("path=/.env") is a 404
+                // page: a dotenv file never contains that value.
+                if (value === ENV_PATH || value.startsWith(ENV_PATH + "?")) {
+                    return false;
+                }
+                quotes = value.startsWith('"') ? countQuotes(value) : 0;
+                if (quotes % 2 === 1) {
+                    valueLines = 1;
+                    quotes = 1;
+                }
             }
         }
 
-        return first !== null && isAssignment(first) && assignments / meaningful >= 0.5;
+        // A value that is still open at the end of the file is not a valid
+        // assignment (dotenv would reject it): do not let it count.
+        if (valueLines > 0) {
+            assignments--;
+        }
+
+        // One assignment is enough only for a single-line file: a two-line page
+        // that just echoes "path=/.env" and an error message is not a dotenv file.
+        return first !== null && isAssignment(first) &&
+            assignments >= (meaningful === 1 ? 1 : 2) &&
+            assignments / meaningful >= 0.5;
     }
 
     // Check for exposed .env file
-    async function checkEnv(url) {
+    async function checkEnv(url, timeout) {
         const to_check = url + ENV_PATH;
 
         try {
             const response = await fetchWithTimeout(to_check, {
-                timeout: 10000
+                timeout
             });
 
             if (response.status === 200) {
