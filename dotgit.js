@@ -472,20 +472,20 @@ function requestTimeoutMs() {
 }
 
 function set_options(options) {
-    max_connections = options.download.max_connections;
-    request_timeout = options.request_timeout;
-    failed_in_a_row = options.download.failed_in_a_row;
-    notification_new_git = options.notification.new_git;
-    notification_download = options.notification.download;
-    check_opensource = options.check_opensource;
-    check_securitytxt = options.check_securitytxt;
-    check_git = options.functions.git;
-    check_svn = options.functions.svn;
-    check_hg = options.functions.hg;
-    check_env = options.functions.env;
-    check_ds_store = options.functions.ds_store;
-    debug = options.debug;
-    check_failed = options.check_failed;
+    max_connections = Number(options.download.max_connections);
+    request_timeout = Number(options.request_timeout);
+    failed_in_a_row = Number(options.download.failed_in_a_row);
+    notification_new_git = Boolean(options.notification.new_git);
+    notification_download = Boolean(options.notification.download);
+    check_opensource = Boolean(options.check_opensource);
+    check_securitytxt = Boolean(options.check_securitytxt);
+    check_git = Boolean(options.functions.git);
+    check_svn = Boolean(options.functions.svn);
+    check_hg = Boolean(options.functions.hg);
+    check_env = Boolean(options.functions.env);
+    check_ds_store = Boolean(options.functions.ds_store);
+    debug = Boolean(options.debug);
+    check_failed = Boolean(options.check_failed);
     blacklist = options.blacklist;
     compiledBlacklist = compileBlacklist(blacklist);
 }
@@ -703,19 +703,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     // Handle simple option updates
     const optionHandlers = {
-        'git': () => check_git = msg.value,
-        'svn': () => check_svn = msg.value,
-        'hg': () => check_hg = msg.value,
-        'env': () => check_env = msg.value,
-        'ds_store': () => check_ds_store = msg.value,
-        'notification_new_git': () => notification_new_git = msg.value,
-        'notification_download': () => notification_download = msg.value,
-        'check_opensource': () => check_opensource = msg.value,
-        'check_securitytxt': () => check_securitytxt = msg.value,
-        'debug': () => debug = msg.value,
-        'max_connections': () => max_connections = msg.value,
-        'request_timeout': () => request_timeout = msg.value,
-        'failed_in_a_row': () => failed_in_a_row = msg.value,
+        'git': () => check_git = Boolean(msg.value),
+        'svn': () => check_svn = Boolean(msg.value),
+        'hg': () => check_hg = Boolean(msg.value),
+        'env': () => check_env = Boolean(msg.value),
+        'ds_store': () => check_ds_store = Boolean(msg.value),
+        'notification_new_git': () => notification_new_git = Boolean(msg.value),
+        'notification_download': () => notification_download = Boolean(msg.value),
+        'check_opensource': () => check_opensource = Boolean(msg.value),
+        'check_securitytxt': () => check_securitytxt = Boolean(msg.value),
+        'debug': () => debug = Boolean(msg.value),
+        'max_connections': () => max_connections = Number(msg.value),
+        'request_timeout': () => request_timeout = Number(msg.value),
+        'failed_in_a_row': () => failed_in_a_row = Number(msg.value),
         'blacklist': () => { blacklist = msg.value; compiledBlacklist = compileBlacklist(blacklist); }
     };
 

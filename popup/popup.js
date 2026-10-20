@@ -37,8 +37,8 @@ if (typeof chrome.browserAction !== "undefined" && typeof chrome.browserAction.s
 document.addEventListener("DOMContentLoaded", function () {
     chrome.storage.local.get(["options"], function (options) {
         if (!options.options) return;
-        let color = options.options.color;
-        let list = document.getElementsByClassName("custom-color");
+        const color = String(options.options.color);
+        const list = document.getElementsByClassName("custom-color");
         for (let n = 0; n < list.length; ++n) {
             list[n].className += " " + color;
         }
@@ -275,7 +275,8 @@ document.addEventListener("DOMContentLoaded", function () {
     chrome.storage.local.get(["withExposedGit", "downloading", "options"], function (visitedSite) {
         // Do not skip rendering when options are not written yet: the popup can
         // open before the background has initialised them.
-        const maxSites = visitedSite.options?.max_sites ?? 100;
+        const storedMaxSites = Number(visitedSite.options?.max_sites);
+        const maxSites = Number.isFinite(storedMaxSites) ? storedMaxSites : 100;
         document.getElementById("hostsFoundTitle").textContent =
             "Total found: 0 Max shown: " + maxSites;
         if (typeof visitedSite.withExposedGit !== "undefined" && visitedSite.withExposedGit.length !== 0) {
@@ -377,7 +378,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     // Load options to get debug value
     chrome.storage.local.get(["options"], function (result) {
         if (result.options && typeof result.options.debug !== "undefined") {
-            debug = result.options.debug;
+            debug = Boolean(result.options.debug);
         }
     });
 

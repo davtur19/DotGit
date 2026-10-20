@@ -326,12 +326,13 @@ if (typeof window.dotGitInjected === 'undefined') {
             const timeout = requestTimeout(options);
 
             // Run core checks in parallel
+            const functions = options.functions || {};
             const [git, svn, hg, env, ds_store] = await Promise.all([
-                options.functions.git ? checkGit(url, timeout) : Promise.resolve(false),
-                options.functions.svn ? checkSvn(url, timeout) : Promise.resolve(false),
-                options.functions.hg ? checkHg(url, timeout) : Promise.resolve(false),
-                options.functions.env ? checkEnv(url, timeout) : Promise.resolve(false),
-                options.functions.ds_store ? checkDSStore(url, timeout) : Promise.resolve(false)
+                Boolean(functions.git) ? checkGit(url, timeout) : Promise.resolve(false),
+                Boolean(functions.svn) ? checkSvn(url, timeout) : Promise.resolve(false),
+                Boolean(functions.hg) ? checkHg(url, timeout) : Promise.resolve(false),
+                Boolean(functions.env) ? checkEnv(url, timeout) : Promise.resolve(false),
+                Boolean(functions.ds_store) ? checkDSStore(url, timeout) : Promise.resolve(false)
             ]);
 
             debugLog('Check results:', {git, svn, hg, env, ds_store});
@@ -351,8 +352,8 @@ if (typeof window.dotGitInjected === 'undefined') {
             let opensource = false;
             if (types.length > 0) {
                 [securitytxt, opensource] = await Promise.all([
-                    options.check_securitytxt ? checkSecuritytxt(url, timeout) : Promise.resolve(false),
-                    git && options.check_opensource ? isOpenSource(url, timeout) : Promise.resolve(false)
+                    Boolean(options.check_securitytxt) ? checkSecuritytxt(url, timeout) : Promise.resolve(false),
+                    Boolean(git) && Boolean(options.check_opensource) ? isOpenSource(url, timeout) : Promise.resolve(false)
                 ]);
 
                 // One message for all types: the background stores them together
@@ -413,7 +414,7 @@ if (typeof window.dotGitInjected === 'undefined') {
 
         if (request.type === "CHECK_SITE") {
             const {url, options} = request;
-            debug = options.debug;
+            debug = Boolean(options.debug);
             debugLog('Checking site:', url, 'with options:', options);
 
             // Run checks based on enabled options
