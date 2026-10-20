@@ -43,9 +43,22 @@ if (typeof window.dotGitInjected === 'undefined') {
     ];
     const SECURITYTXT_SEARCH = "Contact: ";
 
+    // Every check shares one request timeout, so a slow connection is tuned in
+    // one place. The option is in seconds (default 15), like the download one.
+    const DEFAULT_REQUEST_TIMEOUT = 15000;
+    const MIN_REQUEST_TIMEOUT = 5000;
+    const MAX_REQUEST_TIMEOUT = 300000;
+
+    function requestTimeout(options) {
+        const seconds = Number(options && options.request_timeout);
+        return Number.isFinite(seconds) ?
+            Math.min(Math.max(seconds * 1000, MIN_REQUEST_TIMEOUT), MAX_REQUEST_TIMEOUT) :
+            DEFAULT_REQUEST_TIMEOUT;
+    }
+
     // Helper function to make fetch requests with timeout
     async function fetchWithTimeout(resource, options = {}) {
-        const {timeout = 10000} = options;
+        const {timeout = DEFAULT_REQUEST_TIMEOUT} = options;
 
         const controller = new AbortController();
         const id = setTimeout(() => controller.abort(), timeout);
@@ -61,14 +74,14 @@ if (typeof window.dotGitInjected === 'undefined') {
     }
 
     // Check for exposed Git repository
-    async function checkGit(url) {
+    async function checkGit(url, timeout) {
         const to_check = url + GIT_HEAD_PATH;
         const search = new RegExp("^" + GIT_OBJECTS_SEARCH);
 
         try {
             debugLog('Checking Git HEAD:', to_check);
             const response = await fetchWithTimeout(to_check, {
-                timeout: 10000
+                timeout
             });
 
             debugLog('Response status:', response.status);
@@ -99,12 +112,12 @@ if (typeof window.dotGitInjected === 'undefined') {
     }
 
     // Check for exposed SVN repository
-    async function checkSvn(url) {
+    async function checkSvn(url, timeout) {
         const to_check = url + SVN_DB_PATH;
 
         try {
             const response = await fetchWithTimeout(to_check, {
-                timeout: 10000
+                timeout
             });
 
             if (response.status === 200) {
@@ -121,12 +134,12 @@ if (typeof window.dotGitInjected === 'undefined') {
     }
 
     // Check for exposed Mercurial repository
-    async function checkHg(url) {
+    async function checkHg(url, timeout) {
         const to_check = url + HG_MANIFEST_PATH;
 
         try {
             const response = await fetchWithTimeout(to_check, {
-                timeout: 10000
+                timeout
             });
 
             if (response.status === 200) {
@@ -251,12 +264,12 @@ if (typeof window.dotGitInjected === 'undefined') {
     }
 
     // Check for exposed .DS_Store file
-    async function checkDSStore(url) {
+    async function checkDSStore(url, timeout) {
         const to_check = url + DS_STORE;
 
         try {
             const response = await fetchWithTimeout(to_check, {
-                timeout: 10000
+                timeout
             });
 
             if (response.status === 200) {
@@ -273,14 +286,14 @@ if (typeof window.dotGitInjected === 'undefined') {
     }
 
     // Check for security.txt file
-    async function checkSecuritytxt(url) {
+    async function checkSecuritytxt(url, timeout) {
         for (const path of SECURITYTXT_PATHS) {
             const to_check = url + path;
             const search = new RegExp(SECURITYTXT_SEARCH);
 
             try {
                 const response = await fetchWithTimeout(to_check, {
-                    timeout: 10000
+                    timeout
                 });
 
                 if (response.status === 200) {
@@ -296,14 +309,14 @@ if (typeof window.dotGitInjected === 'undefined') {
         return false;
     }
 
-    async function checkGitConfig(url) {
+    async function checkGitConfig(url, timeout) {
         const to_check = url + GIT_CONFIG_PATH;
         const search = new RegExp(GIT_CONFIG_SEARCH);
         let result = [];
 
         try {
             const response = await fetchWithTimeout(to_check, {
-                timeout: 10000
+                timeout
             });
 
             if (response.status === 200) {
@@ -320,8 +333,8 @@ if (typeof window.dotGitInjected === 'undefined') {
     }
 
     // The page's CORS policy blocks cross-origin fetches to github/gitlab, so the
-    // background probes the repository page; it always answers (its fetch has a
-    // 30 s timeout), and a closed port just means "not open source".
+    // background probes the repository page with the same request timeout; a
+    // closed port just means "not open source".
     function checkOpenSource(url) {
         return chrome.runtime.sendMessage({type: "CHECK_OPEN_SOURCE", url: url})
             .then((response) => (response && response.open === true ? url : false))
@@ -338,8 +351,8 @@ if (typeof window.dotGitInjected === 'undefined') {
         return /^https?:\/\//.test(str) ? str : "https://" + str;
     }
 
-    async function isOpenSource(url) {
-        const remote = await checkGitConfig(url);
+    async function isOpenSource(url, timeout) {
+        const remote = await checkGitConfig(url, timeout);
         return remote === false ? false : checkOpenSource(repoPageUrl(remote));
     }
 
@@ -347,13 +360,15 @@ if (typeof window.dotGitInjected === 'undefined') {
         try {
             debugLog('Starting site check for:', url);
 
+            const timeout = requestTimeout(options);
+
             // Run core checks in parallel
             const [git, svn, hg, env, ds_store] = await Promise.all([
-                options.functions.git ? checkGit(url) : Promise.resolve(false),
-                options.functions.svn ? checkSvn(url) : Promise.resolve(false),
-                options.functions.hg ? checkHg(url) : Promise.resolve(false),
-                options.functions.env ? checkEnv(url) : Promise.resolve(false),
-                options.functions.ds_store ? checkDSStore(url) : Promise.resolve(false)
+                options.functions.git ? checkGit(url, timeout) : Promise.resolve(false),
+                options.functions.svn ? checkSvn(url, timeout) : Promise.resolve(false),
+                options.functions.hg ? checkHg(url, timeout) : Promise.resolve(false),
+                options.functions.env ? checkEnv(url, timeout) : Promise.resolve(false),
+                options.functions.ds_store ? checkDSStore(url, timeout) : Promise.resolve(false)
             ]);
 
             debugLog('Check results:', {git, svn, hg, env, ds_store});
@@ -373,8 +388,8 @@ if (typeof window.dotGitInjected === 'undefined') {
             let opensource = false;
             if (types.length > 0) {
                 [securitytxt, opensource] = await Promise.all([
-                    options.check_securitytxt ? checkSecuritytxt(url) : Promise.resolve(false),
-                    git && options.check_opensource ? isOpenSource(url) : Promise.resolve(false)
+                    options.check_securitytxt ? checkSecuritytxt(url, timeout) : Promise.resolve(false),
+                    git && options.check_opensource ? isOpenSource(url, timeout) : Promise.resolve(false)
                 ]);
 
                 // One message for all types: the background stores them together

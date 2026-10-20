@@ -26,6 +26,7 @@ function set_gui(options) {
     document.getElementById("checkFailedOn").checked = !!options.check_failed;
     document.getElementById("checkFailedOff").checked = !options.check_failed;
     document.getElementById("max_sites").value = options.max_sites;
+    document.getElementById("request_timeout").value = options.request_timeout || 15;
     document.getElementById("max_connections").value = download.max_connections;
     document.getElementById("failed_in_a_row").value = download.failed_in_a_row;
     document.getElementById("on1").checked = !!notification.new_git;
@@ -100,6 +101,14 @@ function setupOptionsPage() {
             } else if (e.target.validity.valid === true && (e.target.id === "max_sites")) {
                 result.options.max_sites = Number(e.target.value);
                 chrome.storage.local.set(result);
+            } else if (e.target.validity.valid === true && e.target.id === "request_timeout") {
+                result.options.request_timeout = Number(e.target.value);
+                chrome.storage.local.set(result);
+                chrome.runtime.sendMessage({
+                    type: e.target.id,
+                    value: result.options.request_timeout
+                }, function (response) {
+                });
             } else if (e.target.name === "notification_new_git") {
                 result.options.notification.new_git = (e.target.value === "on");
                 chrome.storage.local.set(result);

@@ -11,6 +11,10 @@ const DEFAULT_OPTIONS = {
     },
     "color": "grey",
     "max_sites": 100,
+    // Seconds before a network request (detection, download, open-source probe)
+    // is aborted. One value for every check, so a slow connection is configured
+    // in one place.
+    "request_timeout": 15,
     "notification": {
         "new_git": true,
         "download": true
@@ -73,6 +77,7 @@ const GIT_WELL_KNOW_PATHS = [
 ];
 
 let max_connections;
+let request_timeout = 15;
 let notification_new_git;
 let notification_download;
 let check_opensource;
@@ -289,7 +294,7 @@ function startDownload(baseUrl, downloadFinished) {
         // A server that accepts the connection and never answers used to keep the
         // whole download (and the popup button) open forever.
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 30000);
+        const timer = setTimeout(() => controller.abort(), requestTimeoutMs());
         fetch(baseUrl + GIT_PATH + path, {signal: controller.signal}).then(function (response) {
             downloadStats[response.status] = (typeof downloadStats[response.status] === "undefined") ? 1 : downloadStats[response.status] + 1;
             if (response.ok && response.status === 200) {
@@ -453,8 +458,16 @@ function compileBlacklist(list) {
     });
 }
 
+// The option stores seconds; hand-edited storage must not turn a missing or
+// malformed value into an immediate abort (or an endless wait).
+function requestTimeoutMs() {
+    const seconds = Number(request_timeout);
+    return (Number.isFinite(seconds) ? Math.min(Math.max(seconds, 5), 300) : 15) * 1000;
+}
+
 function set_options(options) {
     max_connections = options.download.max_connections;
+    request_timeout = options.request_timeout;
     failed_in_a_row = options.download.failed_in_a_row;
     notification_new_git = options.notification.new_git;
     notification_download = options.notification.download;
@@ -540,7 +553,7 @@ async function isReachableRepository(url) {
             return false;
         }
         const controller = new AbortController();
-        timer = setTimeout(() => controller.abort(), 30000);
+        timer = setTimeout(() => controller.abort(), requestTimeoutMs());
         const response = await fetch(target.href, {signal: controller.signal});
         return response.status === 200;
     } catch (error) {
@@ -695,6 +708,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         'check_securitytxt': () => check_securitytxt = msg.value,
         'debug': () => debug = msg.value,
         'max_connections': () => max_connections = msg.value,
+        'request_timeout': () => request_timeout = msg.value,
         'failed_in_a_row': () => failed_in_a_row = msg.value,
         'blacklist': () => { blacklist = msg.value; compiledBlacklist = compileBlacklist(blacklist); }
     };

@@ -16,14 +16,20 @@ An extension for checking if .git is exposed in visited websites
 - List of exposed sites found
 - Download the entire .git folder in zip format, even if the files are not listed on the site
 - View .git/config with one click
-- Options for: colors, notifications and downloads
+- Options for: colors, notifications, timeouts and downloads
 
 _Some checks are turned off by default, open the settings to turn them on_
+## Timeouts
+
+Every network request (checks, downloads and the open-source probe) is aborted after the same **request timeout**,
+15 seconds by default. You can change it in the settings: raise it if your connection is slow, lower it if you want
+the checks to fail fast.
+
 ## How the download works
 
 There is a queue for downloads, with a **maximum of simultaneous connections**; if this number is exceeded, subsequent
-files are queued and started as soon as a connection is free. A request that does not answer within 30 seconds is
-counted as a network error, so a dead server cannot keep the download open forever.
+files are queued and started as soon as a connection is free. A request that does not answer within the request
+timeout is counted as a network error, so a dead server cannot keep the download open forever.
 
 ### Note:
 
